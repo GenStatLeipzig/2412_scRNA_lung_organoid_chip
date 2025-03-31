@@ -1,0 +1,6 @@
+require(here)
+dir.create(here("data"))
+dir.create(here("results"))
+dir.create(here("obj"))
+dir.create(here("../sent"))
+dir.create(here("../nf_scrnaseq"))

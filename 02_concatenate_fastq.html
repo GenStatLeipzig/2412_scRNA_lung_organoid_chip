@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<title></title>
+<style type="text/css">
+/**
+ * Prism.s theme ported from highlight.js's xcode style
+ */
+pre code {
+  padding: 1em;
+}
+.token.comment {
+  color: #007400;
+}
+.token.punctuation {
+  color: #999;
+}
+.token.tag,
+.token.selector {
+  color: #aa0d91;
+}
+.token.boolean,
+.token.number,
+.token.constant,
+.token.symbol {
+  color: #1c00cf;
+}
+.token.property,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin {
+  color: #c41a16;
+}
+.token.inserted {
+  background-color: #ccffd8;
+}
+.token.deleted {
+  background-color: #ffebe9;
+}
+.token.operator,
+.token.entity,
+.token.url,
+.language-css .token.string,
+.style .token.string {
+  color: #9a6e3a;
+}
+.token.atrule,
+.token.attr-value,
+.token.keyword {
+  color: #836c28;
+}
+.token.function,
+.token.class-name {
+  color: #DD4A68;
+}
+.token.regex,
+.token.important,
+.token.variable {
+  color: #5c2699;
+}
+.token.important,
+.token.bold {
+  font-weight: bold;
+}
+.token.italic {
+  font-style: italic;
+}
+</style>
+<style type="text/css">
+body {
+  font-family: sans-serif;
+  max-width: 800px;
+  margin: auto;
+  padding: 1em;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+body, .footnotes, code { font-size: .9em; }
+li li { font-size: .95em; }
+*, *:before, *:after {
+  box-sizing: inherit;
+}
+pre, img { max-width: 100%; }
+pre, pre:hover {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+pre code {
+  display: block;
+  overflow-x: auto;
+}
+code { font-family: 'DejaVu Sans Mono', 'Droid Sans Mono', 'Lucida Console', Consolas, Monaco, monospace; }
+:not(pre) > code, code[class] { background-color: #F8F8F8; }
+code.language-undefined, pre > code:not([class]) {
+  background-color: inherit;
+  border: 1px solid #eee;
+}
+table {
+  margin: auto;
+  border-top: 1px solid #666;
+}
+table thead th { border-bottom: 1px solid #ddd; }
+th, td { padding: 5px; }
+thead, tfoot, tr:nth-child(even) { background: #eee; }
+blockquote {
+  color: #666;
+  margin: 0;
+  padding-left: 1em;
+  border-left: 0.5em solid #eee;
+}
+hr, .footnotes::before { border: 1px dashed #ddd; }
+.frontmatter { text-align: center; }
+#TOC .numbered li { list-style: none; }
+#TOC .numbered { padding-left: 0; }
+#TOC .numbered ul { padding-left: 1em; }
+table, .body h2 { border-bottom: 1px solid #666; }
+.body .appendix, .appendix ~ h2 { border-bottom-style: dashed; }
+.footnote-ref a::before { content: "["; }
+.footnote-ref a::after { content: "]"; }
+section.footnotes::before {
+  content: "";
+  display: block;
+  max-width: 20em;
+}
+
+@media print {
+  body {
+    font-size: 12pt;
+    max-width: 100%;
+  }
+  tr, img { page-break-inside: avoid; }
+}
+@media only screen and (min-width: 992px) {
+  pre { white-space: pre; }
+}
+</style>
+</head>
+<body>
+<div class="frontmatter">
+<div class="title"><h1></h1></div>
+<div class="author"><h2></h2></div>
+<div class="date"><h3></h3></div>
+</div>
+<div class="body">
+<pre><code class="language-r">library(toolboxH)
+</code></pre>
+<pre><code>## Lade nötiges Paket: data.table
+</code></pre>
+<pre><code>## data.table 1.16.0 using 64 threads (see ?getDTthreads).  Latest news: r-datatable.com
+## Lade nötiges Paket: R.utils
+## Lade nötiges Paket: R.oo
+## Lade nötiges Paket: R.methodsS3
+## R.methodsS3 v1.8.2 (2022-06-13 22:00:14 UTC) successfully loaded. See ?R.methodsS3 for help.
+## R.oo v1.26.0 (2024-01-24 05:12:50 UTC) successfully loaded. See ?R.oo for help.
+## 
+## Attache Paket: 'R.oo'
+## 
+## Das folgende Objekt ist maskiert 'package:R.methodsS3':
+## 
+##     throw
+## 
+## Die folgenden Objekte sind maskiert von 'package:methods':
+## 
+##     getClasses, getMethods
+## 
+## Die folgenden Objekte sind maskiert von 'package:base':
+## 
+##     attach, detach, load, save
+## 
+## R.utils v2.12.3 (2023-11-18 01:00:02 UTC) successfully loaded. See ?R.utils for help.
+## 
+## Attache Paket: 'R.utils'
+## 
+## Das folgende Objekt ist maskiert 'package:utils':
+## 
+##     timestamp
+## 
+## Die folgenden Objekte sind maskiert von 'package:base':
+## 
+##     cat, commandArgs, getOption, isOpen, nullfile, parse, use, warnings
+## 
+## Lade nötiges Paket: fdrtool
+## Lade nötiges Paket: png
+## Lade nötiges Paket: RColorBrewer
+## Lade nötiges Paket: readxl
+## Lade nötiges Paket: scales
+## Lade nötiges Paket: stringr
+## Lade nötiges Paket: testthat
+## 
+## Attache Paket: 'testthat'
+## 
+## Das folgende Objekt ist maskiert 'package:R.oo':
+## 
+##     equals
+## 
+## Lade nötiges Paket: eulerr
+## 
+## Attache Paket: 'toolboxH'
+## 
+## Das folgende Objekt ist maskiert 'package:eulerr':
+## 
+##     venn
+</code></pre>
+<pre><code class="language-r">library(here)
+</code></pre>
+<pre><code>## here() starts at /net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk
+</code></pre>
+<pre><code class="language-r"># get list of files
+allfiles &lt;- dir(&quot;/net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip/&quot;, recursive = T, pattern = &quot;*.fastq.gz&quot;, full.names = TRUE)
+
+
+
+# Convert the file paths to a data.table
+files_dt &lt;- data.table(path = allfiles)
+
+# Extract sample, read, and run information
+files_dt[, c(&quot;sample&quot;, &quot;read&quot;, &quot;run&quot;) := {
+    # Extract basename and split components
+    base &lt;- basename(path)
+    # Extract sample ID (S1, S2, etc.)
+    sample &lt;- gsub(&quot;(S[1-4])_.*&quot;, &quot;\\1&quot;, base)
+    # Extract read type (R1 or R2)
+    read &lt;- gsub(&quot;.*_(R[12])_.*&quot;, &quot;\\1&quot;, base)
+    # Extract run number (001 or 002)
+    run &lt;- gsub(&quot;.*_(00[12]).fastq.gz&quot;, &quot;\\1&quot;, base)
+    list(sample, read, run)
+}]
+
+# Create output directory
+output_dir &lt;- here(&quot;../fastq_combined&quot;)
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Group by sample and read to identify pairs to concatenate
+sample_read_groups &lt;- files_dt[, .(paths = list(path)), by = .(sample, read)]
+
+# Concatenate each pair
+for (i in 1:nrow(sample_read_groups)) {
+    # Get files for this sample and read
+    #   i=1
+    current_files &lt;- sample_read_groups[i, paths][[1]]
+
+    # Sort files to ensure 001 comes before 002
+    current_files &lt;- sort(current_files)
+
+    # Create output filename (using 001 convention)
+    output_base &lt;- basename(current_files[1])
+    output_file &lt;- file.path(output_dir, output_base)
+
+    # Concatenate files
+    message(
+        &quot;Concatenating files for&quot;, sample_read_groups[i, sample],
+        sample_read_groups[i, read], &quot;-&gt;&quot;, output_file, &quot;\nUsing command:\n&quot;
+    )
+
+    # Use cat command to concatenate
+    cmd &lt;- paste(&quot;cat&quot;, paste(current_files, collapse = &quot; &quot;), &quot;&gt;&quot;, output_file)
+    cat(cmd)
+    system(cmd)
+}
+</code></pre>
+<pre><code>## Concatenating files forS1R1-&gt;/net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S1_S23_R1_001.fastq.gz
+## Using command:
+</code></pre>
+<pre><code>## cat /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S1/S1_S23_R1_001.fastq.gz /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S1/S1_S23_R1_002.fastq.gz &gt; /net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S1_S23_R1_001.fastq.gz
+</code></pre>
+<pre><code>## Concatenating files forS1R2-&gt;/net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S1_S23_R2_001.fastq.gz
+## Using command:
+</code></pre>
+<pre><code>## cat /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S1/S1_S23_R2_001.fastq.gz /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S1/S1_S23_R2_002.fastq.gz &gt; /net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S1_S23_R2_001.fastq.gz
+</code></pre>
+<pre><code>## Concatenating files forS2R1-&gt;/net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S2_S24_R1_001.fastq.gz
+## Using command:
+</code></pre>
+<pre><code>## cat /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S2/S2_S24_R1_001.fastq.gz /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S2/S2_S24_R1_002.fastq.gz &gt; /net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S2_S24_R1_001.fastq.gz
+</code></pre>
+<pre><code>## Concatenating files forS2R2-&gt;/net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S2_S24_R2_001.fastq.gz
+## Using command:
+</code></pre>
+<pre><code>## cat /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S2/S2_S24_R2_001.fastq.gz /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S2/S2_S24_R2_002.fastq.gz &gt; /net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S2_S24_R2_001.fastq.gz
+</code></pre>
+<pre><code>## Concatenating files forS3R1-&gt;/net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S3_S25_R1_001.fastq.gz
+## Using command:
+</code></pre>
+<pre><code>## cat /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S3/S3_S25_R1_001.fastq.gz /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S3/S3_S25_R1_002.fastq.gz &gt; /net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S3_S25_R1_001.fastq.gz
+</code></pre>
+<pre><code>## Concatenating files forS3R2-&gt;/net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S3_S25_R2_001.fastq.gz
+## Using command:
+</code></pre>
+<pre><code>## cat /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S3/S3_S25_R2_001.fastq.gz /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S3/S3_S25_R2_002.fastq.gz &gt; /net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S3_S25_R2_001.fastq.gz
+</code></pre>
+<pre><code>## Concatenating files forS4R1-&gt;/net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S4_S26_R1_001.fastq.gz
+## Using command:
+</code></pre>
+<pre><code>## cat /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S4/S4_S26_R1_001.fastq.gz /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S4/S4_S26_R1_002.fastq.gz &gt; /net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S4_S26_R1_001.fastq.gz
+</code></pre>
+<pre><code>## Concatenating files forS4R2-&gt;/net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S4_S26_R2_001.fastq.gz
+## Using command:
+</code></pre>
+<pre><code>## cat /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S4/S4_S26_R2_001.fastq.gz /net/ifs1/san_projekte/projekte/genstat/01_daten/2412_scRNA_lung_organoid_chip//Karen_fastq_bothruns/S4/S4_S26_R2_002.fastq.gz &gt; /net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined/S4_S26_R2_001.fastq.gz
+</code></pre>
+<pre><code class="language-r">message(&quot;All files have been concatenated and saved to&quot;, output_dir, &quot;\n&quot;)
+</code></pre>
+<pre><code>## All files have been concatenated and saved to/net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/../fastq_combined
+</code></pre>
+<pre><code class="language-r">finalizeSkript()
+</code></pre>
+<pre><code>## ==================================================================================
+## 
+## 
+## Warnings found so far:
+</code></pre>
+<pre><code>## 
+## kann Datei '/net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/scripts/02_concatenate_fastq.R' nicht öffnen: Datei oder Verzeichnis nicht gefunden 
+##                                                                                                                                                                                                1
+</code></pre>
+<pre><code>## ==================================================================================
+## 
+## 
+## Session Info::
+</code></pre>
+<pre><code>## R version 4.4.2 (2024-10-31)
+## Platform: x86_64-suse-linux-gnu
+## Running under: openSUSE Leap 15.6
+## 
+## Matrix products: default
+## BLAS:   /usr/lib64/R/lib/libRblas.so 
+## LAPACK: /usr/lib64/R/lib/libRlapack.so;  LAPACK version 3.12.0
+## 
+## locale:
+##  [1] LC_CTYPE=de_DE.UTF-8       LC_NUMERIC=C              
+##  [3] LC_TIME=de_DE.UTF-8        LC_COLLATE=de_DE.UTF-8    
+##  [5] LC_MONETARY=de_DE.UTF-8    LC_MESSAGES=de_DE.UTF-8   
+##  [7] LC_PAPER=de_DE.UTF-8       LC_NAME=C                 
+##  [9] LC_ADDRESS=C               LC_TELEPHONE=C            
+## [11] LC_MEASUREMENT=de_DE.UTF-8 LC_IDENTIFICATION=C       
+## 
+## time zone: Europe/Berlin
+## tzcode source: system (glibc)
+## 
+## attached base packages:
+## [1] stats     graphics  grDevices utils     datasets  methods   base     
+## 
+## other attached packages:
+##  [1] here_1.0.1         toolboxH_0.2.17    eulerr_7.0.2       testthat_3.2.1.1  
+##  [5] stringr_1.5.1      scales_1.3.0       readxl_1.4.3       RColorBrewer_1.1-3
+##  [9] png_0.1-8          fdrtool_1.2.18     R.utils_2.12.3     R.oo_1.26.0       
+## [13] R.methodsS3_1.8.2  data.table_1.16.0 
+## 
+## loaded via a namespace (and not attached):
+##  [1] vctrs_0.6.5      cli_3.6.3        knitr_1.48       rlang_1.1.4     
+##  [5] xfun_0.46        stringi_1.8.4    glue_1.7.0       colorspace_2.1-1
+##  [9] rprojroot_2.0.4  brio_1.1.5       grid_4.4.2       cellranger_1.1.0
+## [13] evaluate_0.24.0  munsell_0.5.1    lifecycle_1.0.4  compiler_4.4.2  
+## [17] Rcpp_1.0.13      R6_2.5.1         magrittr_2.0.3   tools_4.4.2
+</code></pre>
+<pre><code>## ==================================================================================
+## 
+## 
+## Total Time:
+</code></pre>
+<pre><code class="language-r"># knitr::opts_chunk$set(error = FALSE)
+# filename_in = '/net/ifs1/san_projekte/projekte/genstat/02_projekte/2412_scRNA_lung_organoid_chip/gitOrganoid_hk/scripts/02_concatenate_fastq.R'  # nolint
+# file.exists(filename_in) # check if file exists
+# knitr::spin(filename_in, knit = TRUE)
+</code></pre>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js" defer></script>
+</body>
+</html>
