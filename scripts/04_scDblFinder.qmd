@@ -67,18 +67,74 @@ source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-02-28
 
 
 ```{r}
-s1 = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S1/S1_filtered_matrix.seurat.rds" ))
-s2 = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S2/S2_filtered_matrix.seurat.rds" ))
-s3 = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S3/S3_filtered_matrix.seurat.rds" ))
-s4 = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S4/S4_filtered_matrix.seurat.rds" ))
+s1_raw = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S1/S1_raw_matrix.seurat.rds" ))
+s2_raw = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S2/S2_raw_matrix.seurat.rds" ))
+s3_raw = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S3/S3_raw_matrix.seurat.rds" ))
+s4_raw = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S4/S4_raw_matrix.seurat.rds" ))
+
+s1_filtered = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S1/S1_filtered_matrix.seurat.rds" ))
+s2_filtered = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S2/S2_filtered_matrix.seurat.rds" ))
+s3_filtered = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S3/S3_filtered_matrix.seurat.rds" ))
+s4_filtered = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S4/S4_filtered_matrix.seurat.rds" ))
+
+s1_cellbender_filter = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S1/S1_cellbender_filter_matrix.seurat.rds" ))
+s2_cellbender_filter = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S2/S2_cellbender_filter_matrix.seurat.rds" ))
+s3_cellbender_filter = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S3/S3_cellbender_filter_matrix.seurat.rds" ))
+s4_cellbender_filter = readRDS(here("../gitOrganoid_hk/results/cellranger1/cellranger/mtx_conversions/S4/S4_cellbender_filter_matrix.seurat.rds" ))
 
 
+# filter 
+s1_raw_anno = data.table(s1_raw@meta.data, keep.rownames = T)
+s2_raw_anno = data.table(s2_raw@meta.data, keep.rownames = T)
+s3_raw_anno = data.table(s3_raw@meta.data, keep.rownames = T)
+s4_raw_anno = data.table(s4_raw@meta.data, keep.rownames = T)
+
+cellranger_raw_anno = rbind(s1_raw_anno[,dataset := 's1_raw'],
+                            s2_raw_anno[,dataset := 's2_raw'],
+                            s3_raw_anno[,dataset := 's3_raw'],
+                            s4_raw_anno[,dataset := 's4_raw'])
+
+
+s1_filtered_anno = data.table(s1_filtered@meta.data, keep.rownames = T)
+s2_filtered_anno = data.table(s2_filtered@meta.data, keep.rownames = T)
+s3_filtered_anno = data.table(s3_filtered@meta.data, keep.rownames = T)
+s4_filtered_anno = data.table(s4_filtered@meta.data, keep.rownames = T)
+
+cellranger_filtered_anno = rbind(s1_filtered_anno[,dataset := 's1_filtered'],
+                                 s2_filtered_anno[,dataset := 's2_filtered'],
+                                 s3_filtered_anno[,dataset := 's3_filtered'],
+                                 s4_filtered_anno[,dataset := 's4_filtered'])
+
+
+s1_cellbender_filter_anno = data.table(s1_cellbender_filter@meta.data, keep.rownames = T)
+s2_cellbender_filter_anno = data.table(s2_cellbender_filter@meta.data, keep.rownames = T)
+s3_cellbender_filter_anno = data.table(s3_cellbender_filter@meta.data, keep.rownames = T)
+s4_cellbender_filter_anno = data.table(s4_cellbender_filter@meta.data, keep.rownames = T)
+
+cellbender_filter_anno = rbind(s1_cellbender_filter_anno[,dataset := 's1_cellbender_filter_'],
+                               s2_cellbender_filter_anno[,dataset := 's2_cellbender_filter_'],
+                               s3_cellbender_filter_anno[,dataset := 's3_cellbender_filter_'],
+                               s4_cellbender_filter_anno[,dataset := 's4_cellbender_filter_'])
+
+
+qlist3 = venn3(cellbender_filter_anno$rn, cellranger_raw_anno$rn, cellranger_filtered_anno$rn)
+
+mytable(cellranger_filtered_anno$sample)
 
 # Option 2: Using a list-based approach (more flexible)
-seurat_list_pre <- list(S1 = s1, 
-                    S2 = s2, 
-                    S3 = s3, 
-                    S4 = s4)
+
+s1 = s1_raw[,colnames(s1_raw) %in% cellbender_filter_anno$rn]
+s2 = s2_raw[,colnames(s2_raw) %in% cellbender_filter_anno$rn] 
+s3 = s3_raw[,colnames(s3_raw) %in% cellbender_filter_anno$rn] 
+s4 = s4_raw[,colnames(s4_raw) %in% cellbender_filter_anno$rn]
+
+
+seurat_list_pre <- list(
+  S1 = s1, 
+  S2 = s2, 
+  S3 = s3, 
+  S4 = s4
+)
 
 # Merge all objects in the list
 combined_seurat <- merge(x = seurat_list_pre[[1]], 
@@ -86,13 +142,16 @@ combined_seurat <- merge(x = seurat_list_pre[[1]],
                          add.cell.ids = names(seurat_list_pre),
                          project = "organoid")
 
-
+combined_seurat
+combined_seurat = JoinLayers(combined_seurat)
+combined_seurat
 ## convert to normal geneids ----
 geneinfo_pre = fread(here("../gitOrganoid_hk/results/cellranger1/cellranger/mkref/cellranger_reference/star/geneInfo.tab"), skip = 1, col.names = c(  "geneid", "genename", "genetype"))
 
-Idents(combined_seurat) = "seurat_cluster"
 Idents(combined_seurat) %>% mytable()
-avex = AverageExpression(combined_seurat, group.by = "orig.ident")
+Idents(combined_seurat) = combined_seurat$orig.ident
+Idents(combined_seurat) %>% mytable()
+avex = AverageExpression(combined_seurat, group.by = "orig.ident", assays = "RNA", layer = "counts")
 avex2 = as.data.table(avex$RNA, keep.rownames = T)
 
 qlist1 = venn2(geneinfo_pre$geneid, rownames(combined_seurat), mylabels = c("geneid", "cellranger"), mytitle = "Gene name convert")
@@ -118,7 +177,7 @@ geneinfo[allDuplicatedEntries(genename2)]
 update_gene_names <- function(seurat_obj, gene_map=geneinfo) {
   # Get current gene names (rownames)
   current_genes <- rownames(seurat_obj)
-
+  
   stopifnot(all(current_genes %in% gene_map$geneid))
   new_genes = gene_map[match_hk(current_genes, gene_map$geneid), genename2]
   
@@ -150,52 +209,28 @@ combined_seurat <- merge(x = seurat_list[[1]],
                          add.cell.ids = names(seurat_list),
                          project = "organoid")
 
-
+combined_seurat
 # Check the first few gene names to verify
 head(rownames(s1_updated))
 
-
-# Now process the combined object as needed
-combined_seurat <- NormalizeData(combined_seurat)
-combined_seurat <- FindVariableFeatures(combined_seurat)
-combined_seurat <- ScaleData(combined_seurat)
-combined_seurat <- RunPCA(combined_seurat)
-
-# Add clustering
-combined_seurat <- FindNeighbors(combined_seurat, dims = 1:30)
-combined_seurat <- FindClusters(combined_seurat, resolution = 0.5)
-combined_seurat <- RunUMAP(combined_seurat, dims = 1:30)
-
-
-
+# filter  minimal -----
 combined_seurat[["percent.mt"]] <- PercentageFeatureSet(combined_seurat, pattern = "^MT-")
 combined_seurat[["percent.ribo"]] <- PercentageFeatureSet(combined_seurat, pattern = "^RP[SL]")
 
 
-# Visualization
-p1 <- DimPlot(combined_seurat, reduction = "umap", group.by = "sample", label = TRUE) + NoLegend()
-p2 <- DimPlot(combined_seurat, reduction = "umap", group.by = "seurat_clusters", label = TRUE)+ NoLegend()
-p3 <- VlnPlot(combined_seurat, features = c("nFeature_RNA", "nCount_RNA","percent.mt", "percent.ribo"), pt.size = 0 , ncol= 4) & geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) & scale_y_continuous(breaks = pretty_breaks(10), labels = label_number(accuracy = 1))
-p3b <- VlnPlot(combined_seurat, features = c("nFeature_RNA", "nCount_RNA","percent.mt", "percent.ribo"), pt.size = 0 , ncol= 4) & geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) & scale_y_log10(breaks = log_breaks(10))
-
-# Show the plots side by side
-(p1 + p2) / p3 / p3b
-
-
 # Define thresholds
-min_features <- 200
+min_features <- 50
 max_features <-  (max(combined_seurat$nFeature_RNA)*1.1) %>% round(-3)
 max_features
-min_counts <- 300
+min_counts <- 50
 max_counts <- (max(combined_seurat$nCount_RNA)*1.1) %>% round(-4)
 max_counts
-max_mt <- 25
+max_mt <- 100
 
 # Visualization
-
-# Add horizontal lines to linear scale plots
+Idents(combined_seurat) = combined_seurat$sample
 p3 <- VlnPlot(combined_seurat, features = c("nFeature_RNA", "nCount_RNA","percent.mt", "percent.ribo"), pt.size = 0, ncol= 4) & 
-  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) & 
+  geom_boxplot(width = 0.02, fill = "white", outlier.shape = NA) & 
   scale_y_continuous(breaks = pretty_breaks(10), labels = label_number(accuracy = 1))
 
 # Add threshold lines to each panel in p3
@@ -210,6 +245,76 @@ p3[[3]] <- p3[[3]] +
 
 # Add horizontal lines to log scale plots
 p3b <- VlnPlot(combined_seurat, features = c("nFeature_RNA", "nCount_RNA","percent.mt", "percent.ribo"), pt.size = 0, ncol= 4) & 
+  geom_boxplot(width = 0.02, fill = "white", outlier.shape = NA) & 
+  scale_y_log10(breaks = log_breaks(10))
+
+# Add threshold lines to each panel in p3b
+p3b[[1]] <- p3b[[1]] + 
+  geom_hline(yintercept = min_features, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = max_features, color = "red", linetype = "dashed")
+p3b[[2]] <- p3b[[2]] + 
+  geom_hline(yintercept = min_counts, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = max_counts, color = "red", linetype = "dashed")
+p3b[[3]] <- p3b[[3]] + 
+  geom_hline(yintercept = max_mt, color = "red", linetype = "dashed")
+
+# Show the plots side by side
+p3 / p3b
+
+
+
+combined_seurat_filt1 <- subset(combined_seurat, 
+                                subset = nFeature_RNA > min_features & 
+                                  nFeature_RNA < max_features & 
+                                  nCount_RNA > min_counts & 
+                                  nCount_RNA < max_counts & 
+                                  percent.mt < max_mt) %>% 
+  JoinLayers()
+1-ncol(combined_seurat_filt1)/ncol(combined_seurat)
+
+
+mytable(combined_seurat_filt1$sample)
+
+
+# Now process the combined object as needed
+combined_seurat_filt1 <- NormalizeData(combined_seurat_filt1)
+combined_seurat_filt1 <- FindVariableFeatures(combined_seurat_filt1)
+combined_seurat_filt1 <- ScaleData(combined_seurat_filt1)
+combined_seurat_filt1 <- RunPCA(combined_seurat_filt1)
+
+# Add clustering
+combined_seurat_filt1 <- FindNeighbors(combined_seurat_filt1, dims = 1:30)
+combined_seurat_filt1 <- FindClusters(combined_seurat_filt1, resolution = 0.5)
+combined_seurat_filt1 <- RunUMAP(combined_seurat_filt1, dims = 1:30)
+
+
+
+
+# Visualization
+p1 <- DimPlot(combined_seurat_filt1, reduction = "umap", group.by = "sample", label = TRUE) + NoLegend()
+p2 <- DimPlot(combined_seurat_filt1, reduction = "umap", group.by = "seurat_clusters", label = TRUE)+ NoLegend()
+
+
+# Visualization
+Idents(combined_seurat_filt1) = combined_seurat_filt1$seurat_clusters
+mytable(Idents(combined_seurat_filt1) )
+# Add horizontal lines to linear scale plots
+p3 <- VlnPlot(combined_seurat_filt1, features = c("nFeature_RNA", "nCount_RNA","percent.mt", "percent.ribo"), pt.size = 0, ncol= 4) & 
+  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) & 
+  scale_y_continuous(breaks = pretty_breaks(10), labels = label_number(accuracy = 1))
+
+# Add threshold lines to each panel in p3
+p3[[1]] <- p3[[1]] + 
+  geom_hline(yintercept = min_features, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = max_features, color = "red", linetype = "dashed")
+p3[[2]] <- p3[[2]] + 
+  geom_hline(yintercept = min_counts, color = "red", linetype = "dashed") +
+  geom_hline(yintercept = max_counts, color = "red", linetype = "dashed")
+p3[[3]] <- p3[[3]] + 
+  geom_hline(yintercept = max_mt, color = "red", linetype = "dashed")
+
+# Add horizontal lines to log scale plots
+p3b <- VlnPlot(combined_seurat_filt1, features = c("nFeature_RNA", "nCount_RNA","percent.mt", "percent.ribo"), pt.size = 0, ncol= 4) & 
   geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) & 
   scale_y_log10(breaks = log_breaks(10))
 
@@ -227,13 +332,11 @@ p3b[[3]] <- p3b[[3]] +
 (p1 + p2) / p3 / p3b
 
 
-seurat =  subset(combined_seurat, subset = percent.mt < max_mt) %>% JoinLayers()
-1-ncol(seurat)/ncol(combined_seurat)
 
-seurat$orig.ident %>% table()
-seurat$run10x = seurat$sample
-seurat$run10x %>% mytable()
-# checkSCTslots(seurat)
+combined_seurat_filt1$orig.ident %>% table()
+combined_seurat_filt1$run10x = combined_seurat_filt1$sample
+combined_seurat_filt1$run10x %>% mytable()
+# checkSCTslots(combined_seurat_filt1)
 
 ```
 
@@ -241,7 +344,7 @@ seurat$run10x %>% mytable()
 
 
 ```{r}
-sce <- as.SingleCellExperiment(seurat, assay= "RNA")
+sce <- as.SingleCellExperiment(combined_seurat_filt1, assay= "RNA")
 sce$run10x %>% table()
 library(BiocParallel)
 require(scDblFinder)
@@ -254,17 +357,45 @@ sce_attrib[,.N, .( scDblFinder.class, sample)]
 resi = sce_attrib[, . (rn, scDblFinder.sample, scDblFinder.class, scDblFinder.score, scDblFinder.weighted, scDblFinder.cxds_score)] # in particular 'scDblFinder.score' (the final score used) and 'scDblFinder.class' (whether the cell is called as 'doublet' or 'singlet').
 resi[, boxplot(scDblFinder.score~scDblFinder.class)$x]
 
-seurat$scDblFinder.score = resi[match_hk(colnames(seurat), resi$rn), scDblFinder.score]
-seurat$scDblFinder.class = resi[match_hk(colnames(seurat), resi$rn), scDblFinder.class]
+combined_seurat_filt1$scDblFinder.score = resi[match_hk(colnames(combined_seurat_filt1), resi$rn), scDblFinder.score]
+combined_seurat_filt1$scDblFinder.class = resi[match_hk(colnames(combined_seurat_filt1), resi$rn), scDblFinder.class]
 
-mytable(seurat$scDblFinder.class)
+mytable(combined_seurat_filt1$scDblFinder.class)
 
 
-(DimPlot(seurat, group.by = c("seurat_clusters"), label = TRUE) + NoLegend()) + 
-  FeaturePlot(seurat, features =  "scDblFinder.score") +
-  (VlnPlot(seurat, features = "scDblFinder.score", group.by = "seurat_clusters", pt.size = 0) + scale_y_continuous(breaks = pretty_breaks(10), labels =  label_percent(accuracy = 1)) + geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA)) +
+(DimPlot(combined_seurat_filt1, group.by = c("seurat_clusters"), label = TRUE) + NoLegend()) + 
+  FeaturePlot(combined_seurat_filt1, features =  "scDblFinder.score") +
+  (VlnPlot(combined_seurat_filt1, features = "scDblFinder.score", group.by = "seurat_clusters", pt.size = 0) + scale_y_continuous(breaks = pretty_breaks(10), labels =  label_percent(accuracy = 1)) + geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA)) +
   (ggplot(sce_attrib, aes(x = seurat_clusters, fill = scDblFinder.class)) + geom_bar(position = "fill")  + theme_minimal(base_size = 15) + theme(legend.position = "top") + scale_y_continuous(labels = label_percent(accuracy = 1)))
 ```
+
+# fullnames to geninfo
+```{r}
+
+library(org.Hs.eg.db)
+keytypes(org.Hs.eg.db)
+gendetails <- select(org.Hs.eg.db, keys = geneinfo$geneid, columns = c("ENSEMBL","SYMBOL", "GENENAME"), keytype = "ENSEMBL") %>% data.table()
+
+qlist644 = venn2(gendetails$ENSEMBL, geneinfo$geneid )
+showNA(gendetails)
+gendetails2 <- gendetails[ENSEMBL %in% geneinfo$geneid &
+                            SYMBOL %in% geneinfo$genename]
+
+gendetails2[, id := paste(ENSEMBL, SYMBOL , sep = " | ")]
+geneinfo[, id := paste(geneid, genename , sep = " | ")]
+
+qlist645 = venn2(gendetails2$id, geneinfo$id )
+qlist645$q2
+allDuplicatedEntries(gendetails)
+
+gendetails3 = gendetails2[, .(SYMBOL, GENENAME)] %>% unique()
+gendetails3[allDuplicatedEntries(SYMBOL)]
+
+geneinfo[, fullname := gendetails3[match_hk(geneinfo$genename, gendetails3$SYMBOL), GENENAME]]
+geneinfo[, id := NULL]
+showNA(geneinfo)
+```
+
 
 # save
 ```{r}
