@@ -48,6 +48,8 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 results/cellranger1/
+results
+
 
 scripts/_archive/
 
