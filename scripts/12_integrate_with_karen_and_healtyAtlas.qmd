@@ -1,0 +1,965 @@
+---
+title: "integrate with older and atlas"
+format:
+  html:
+    df-print: paged
+    fig-width: 10
+    fig-height: 7
+    code-fold: true
+    code-summary: "Show the code"
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    number-sections: false
+    standalone: true
+    embed-resources: true
+editor: source
+execute:
+  cache: false
+editor_options:
+  chunk_output_type: console
+---
+
+# INITITATE
+  
+```{r}
+rm(list = setdiff(ls(), "seurat"))
+# .libPaths("~/rpackages/angmar/")
+.libPaths()
+
+library(toolboxH)
+library(Seurat)
+
+library(here)
+library(ggplot2)
+library(scales)
+library(ggthemes)
+# BiocManager::install("scRNAseq")
+library(BiocParallel)
+library(patchwork)
+# library(DropletUtils)
+# library(celda)
+
+require(gprofiler2)
+
+# BiocManager::install("SingleR")
+
+library(future) #https://satijalab.org/celllines/archive/v3.0/future_vignette.html
+options(future.globals.maxSize= 30*1024^3) # to prevent the error
+future.seed=TRUE # to care for proper random seeds
+# The total size of the 15 globals exported for future expression ('FUN()') is 12.32 GiB.. This exceeds the maximum allowed size of 500.00 MiB (option 'future.globals.maxSize'). The three largest globals are 'object' (12.26 GiB of class 'numeric'), 'split.cells' (54.18 MiB of class 'list') and 'rowVars' (226.99 KiB of class 'function')
+ncores = 4
+plan("multicore", workers = ncores)
+initializeSkript()
+# options(future.globals.maxSize = 10e+09)
+options(scipen=999)
+```
+
+## special functions
+```{r}
+source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-05-15.R"))
+
+gptcelltype_hk <- function(input, tissuename=NULL, model='gpt-4', topgenenumber = 10, 
+                           include_downreg = TRUE) {
+  OPENAI_API_KEY <- Sys.getenv("OPENAI_API_KEY")
+  if (OPENAI_API_KEY == "") {
+    print("Note: OpenAI API key not found: returning the prompt itself.")
+    API.flag <- 0
+  } else {
+    API.flag <- 1
+  }
+  
+  if (class(input)=='list') {
+    input <- sapply(input,paste,collapse=',')
+  } else {
+    # Create separate lists for upregulated and downregulated genes
+    up_input <- input[input$avg_log2FC > 0,,drop=FALSE]
+    up_genes <- tapply(up_input$gene, list(up_input$cluster), 
+                       function(i) paste0(i[1:min(topgenenumber, length(i))], collapse=','))
+    
+    # Process downregulated genes if requested
+    if (include_downreg) {
+      down_input <- input[input$avg_log2FC < 0,,drop=FALSE]
+      down_genes <- tapply(down_input$gene, list(down_input$cluster), 
+                           function(i) paste0(i[1:min(topgenenumber, length(i))], collapse=','))
+      
+      # Create formatted input for each cluster
+      formatted_input <- character(0)
+      all_clusters <- unique(c(names(up_genes), names(down_genes)))
+      
+      for (cluster in all_clusters) {
+        up_str <- if (cluster %in% names(up_genes)) up_genes[cluster] else ""
+        down_str <- if (cluster %in% names(down_genes)) down_genes[cluster] else ""
+        formatted_input[cluster] <- paste0("UP[", up_str, "] DOWN[", down_str, "]")
+      }
+    } else {
+      # Use only upregulated genes if downregulated genes are not requested
+      formatted_input <- paste0("UP[", up_genes, "] DOWN[]")
+      names(formatted_input) <- names(up_genes)
+    }
+    
+    input <- formatted_input
+  }
+  
+  # Create the prompt header
+  prompt_header <- paste0('Identify cell types of ', tissuename, ' cells using the following markers for each row representin a cluster of cells in a Seurat scRNA-seq analysis. ',
+                          'Each row representing the cluster starts with a certain number as ID for this cluster and a colon, followed by genes differentially expressed in this cluster vs. the others, provided in two categories:\n',
+                          '1. Upregulated genes are shown in brackets after "UP" (e.g., UP[Gene1,Gene2,Gene3])\n',
+                          '2. Downregulated genes are shown in brackets after "DOWN" (e.g., DOWN[Gene4,Gene5,Gene6])\n\n',
+                          'Only provide the cell type name. Do show cluster number and a colon before the name. If you do not find a celltype, return "Unknown". Return the same number of rows as the number of clusters provided as input\n ',
+                          'Some clusters can be a mixture of multiple cell types.\n\n')
+  
+  # Generate full prompt with all genes included
+  full_prompt <- paste0(prompt_header, paste0(names(input), ': ', unlist(input), collapse = '\n'))
+  
+  # Always print the full prompt for copying to online LLM
+  print("Complete prompt (copy this to test with an online LLM):")
+  cat(full_prompt)
+  
+  if (!API.flag){
+    return(full_prompt)
+  } else {
+    print("Note: OpenAI API key found: returning the cell type annotations.")
+    
+    cutnum <- ceiling(length(input)/50)
+    if (cutnum > 1) {
+      cid <- as.numeric(cut(1:length(input),cutnum))	
+      print(paste0("Note: Due to the number of clusters (", length(input), "), the API request will be split into ", 
+                   cutnum, " batches."))
+    } else {
+      cid <- rep(1,length(input))
+    }
+    
+    allres <- list()
+    
+    for (i in 1:cutnum) {
+      # i=1
+      id <- which(cid==i)
+      
+      # Generate batch-specific prompt
+      batch_prompt <- paste0(prompt_header, paste0(names(input)[id], ': ', input[id], collapse = '\n'))
+      
+      # For each batch, print which clusters are included
+      cat(paste0("Batch ", i, " includes clusters: ", paste(names(input)[id], collapse=", ")))
+      
+      # Use tryCatch to handle potential errors without looping
+      result <- tryCatch({
+        k <- openai::create_chat_completion(
+          model = model,
+          message = list(list("role" = "user", "content" = batch_prompt))
+        )
+        
+        res <- strsplit(k$choices[,'message.content'],'\n')[[1]]
+        
+        # Check if we have the right number of results
+        if (length(res) != length(id)) {
+          warning(paste("Expected", length(id), "results, but got", length(res), 
+                        "- the model response may be incomplete or incorrectly formatted."), immediate. = TRUE )
+        }
+        
+        names(res) <- names(input)[id]
+        res
+      }, error = function(e) {
+        # Print the error message and return NULL instead of retrying
+        print(paste("Error in API call for batch", i, ":", e$message))
+        print("Suggestion: Try reducing the number of genes per cluster or clusters per batch.")
+        return(res)
+      })
+      
+      if (!is.null(result)) {
+        allres[[i]] <- result
+      } else {
+        print(paste("Batch", i, "failed. Continuing with next batch if available."))
+      }
+    }
+    
+    # Combine results from successful batches
+    if (length(allres) > 0) {
+      final_results <- gsub(',$', '', unlist(allres))
+      print('Note: It is always recommended to check the results returned by GPT-4 in case of\n AI hallucination, before going to down-stream analysis.')
+      return(final_results)
+    } else {
+      print("All API calls failed. Please check error messages above.")
+      return(NULL)
+    }
+  }
+}
+# Sys.setenv(OPENAI_API_KEY = 'your_openai_API_key')
+
+```
+```{r}
+
+
+require(Seurat)
+require(here)
+karen_pre = readRDS(here("data/GSE197949_organoids_HT2.rds")) 
+karen_pre
+DimPlot(karen_pre)
+anno_karen = karen_pre@meta.data %>% as.data.table(keep.rownames = TRUE)
+anno_karen[,.N, .(orig.ident, donor)]
+DimPlot(karen_pre, group.by = c("predicted.id", 'cluster'))
+ggplotSankey(anno_karen[,.(predicted.id, cluster)])
+plotly::ggplotly(DimPlot(karen_pre, group.by = c("predicted.id", 'cluster')))
+
+
+```
+
+```{r}
+all10x4 = readRDS(here("results/06_1_all10x4_celltypes_qced_integrated.rds"))
+all10x4
+
+
+```
+
+
+# repeat clustering with filtered and higher level
+```{r}
+# Now process the combined object as needed
+all10x5 = DietSeurat(all10x4, layers = "count")
+all10x5[['mnn.reconstructed']] = NULL
+Assays(all10x5)
+## delete data and scale.date slot
+all10x5[["RNA"]]$data <- NULL
+all10x5[["RNA"]]$scale.data <- NULL
+
+
+
+```
+
+```{r}
+karen = copy(karen_pre)
+DefaultAssay(karen) = "RNA"
+DefaultAssay(karen)
+
+
+```
+
+```{r}
+karen[["integrated"]] = NULL
+
+karen@assays$RNA@counts %>% hh(12)
+karen =  DietSeurat(karen, layers = "counts")
+```
+```{r}
+karen$run10x = karen$orig.ident
+
+
+both10x_pre = merge(x = all10x5, y = karen, add.cell.ids = c("karenstretch", "karenpur"))
+both10x_pre
+```
+```{r}
+healthatlas_pre = readRDS("J:/02_projekte/2412_scRNA_lung_organoid_chip/external_scdata/ integrated cell atlas of the human lung core/b351804c-293e-4aeb-9c4c-043db67f4540.rds")
+healthatlas_pre
+
+
+healthatlas_pre$tissue %>% mytable()
+
+plotly::ggplotly( DimPlot(healthatlas_pre[, healthatlas_pre$assay =="10x 3' v3" & healthatlas_pre$tissue =="lung parenchyma"], group.by=c("ann_finest_level")))
+
+( DimPlot(healthatlas_pre[, healthatlas_pre$assay =="10x 3' v3" & healthatlas_pre$tissue =="lung parenchyma"], group.by=c("ann_coarse_for_GWAS_and_modeling","ann_finest_level"), label = TRUE, repel = TRUE) + NoLegend())+ ggplotSankey(healthatlas_pre@meta.data[,c("ann_coarse_for_GWAS_and_modeling"), drop = FALSE])+ ggplotSankey(healthatlas_pre@meta.data[,c( 'ann_finest_level'), drop = FALSE])
+table(healthatlas_pre@meta.data[,c("ann_coarse_for_GWAS_and_modeling"), drop = T])
+
+table(healthatlas_pre@meta.data[,c("ann_finest_level"), drop = T])
+DimPlot(healthatlas_pre[, healthatlas_pre$assay =="10x 3' v3" & healthatlas_pre$tissue =="lung parenchyma" & healthatlas_pre$ann_coarse_for_GWAS_and_modeling=="Basal"], group.by=c("ann_coarse_for_GWAS_and_modeling","ann_finest_level"), label = TRUE, repel = TRUE)
+
+anno_mark = healthatlas_pre@meta.data %>% as.data.table(keep.rownames = T)
+
+anno_mark[,.N, .(assay)][order(N)]
+healthatlas = healthatlas_pre[, healthatlas_pre$assay =="10x 3' v3" & healthatlas_pre$tissue =="lung parenchyma"]
+healthatlas
+anno_mark2 = anno_mark[assay == "10x 3' v3"& tissue =="lung parenchyma"]
+anno_mark2[,.N, .(assay, tissue,lung_condition,fresh_or_frozen,cause_of_death, disease,sequencing_platform,tissue_dissociation_protocol, tissue_sampling_method,development_stage,subject_type)]
+
+anno_mark2[,.N,.(donor_id, sex, self_reported_ethnicity,tissue_type, tissue_level_2, tissue_level_3, sample)]
+healthatlas = DietSeurat(healthatlas)
+healthatlas[["RNA"]]$data <- NULL
+healthatlas[["RNA"]]$scale.data <- NULL
+healthatlas$sample %>%  table()
+healthatlas$run10x = as.character(healthatlas$sample)
+healthatlas$run10x %>%  table()
+
+anno_mark2[, ann_coarse_for_GWAS_and_modeling := as.character(ann_coarse_for_GWAS_and_modeling)]
+anno_mark2[, ann_coarse_for_GWAS_and_modeling %>% table() %>% sort()]
+
+anno_mark2[, ann_finest_level := as.character(ann_finest_level)]
+anno_mark2[, ann_finest_level %>% table() %>% sort()]
+
+
+anno_mark2[ann_coarse_for_GWAS_and_modeling !=ann_finest_level,.N, .(ann_coarse_for_GWAS_and_modeling,ann_finest_level)][order(ann_coarse_for_GWAS_and_modeling)] %>% data.frame()
+
+healthatlas$celltype_provis =  healthatlas$ann_coarse_for_GWAS_and_modeling
+DimPlot(healthatlas)
+```
+
+```{r}
+
+```
+
+
+```{r}
+both10x = merge(x = both10x_pre, y = healthatlas, add.cell.ids = c("", "atlas"))
+both10x
+
+both10x = JoinLayers(both10x)
+both10x
+```
+
+```{r}
+both10x$run10x %>% mytable()
+
+```
+
+```{r}
+# Create a new Seurat object with only the counts layer
+counts_matrix <- GetAssayData(both10x, assay = "RNA", layer = "counts")
+new_seurat <- CreateSeuratObject(counts = counts_matrix)
+
+# Copy over metadata and other essential information
+new_seurat@meta.data <- both10x@meta.data
+new_seurat@reductions <- both10x@reductions  # If you have any dimensional reductions
+
+# Verify the new object has only counts
+new_seurat
+
+```
+
+
+```{r}
+new_seurat$run10x %>% mytable()
+new_seurat[["RNA"]] <- split(new_seurat[["RNA"]], f = new_seurat$run10x)
+
+new_seurat <- NormalizeData(new_seurat)
+new_seurat <- FindVariableFeatures(new_seurat)
+new_seurat <- ScaleData(new_seurat)
+new_seurat <- RunPCA(new_seurat)
+
+# Add clustering
+new_seurat <- FindNeighbors(new_seurat, dims = 1:30, reduction = "pca")
+
+new_seurat <- FindClusters(new_seurat, resolution = 1, cluster.name = "unintegrated_clusters")
+new_seurat <- RunUMAP(new_seurat, dims = 1:30, reduction = "pca", reduction.name = "umap.unintegrated")
+
+Reductions(new_seurat)
+
+mytable(new_seurat$cluster)
+mytable(new_seurat$celltype_chatti4_1_purcons)
+
+new_seurat$celltype_provis = ifelse(is.na(new_seurat$celltype_chatti4_1_purcons), new_seurat$cluster, new_seurat$celltype_chatti4_1_purcons)
+
+new_seurat$celltype_provis = ifelse(is.na(new_seurat$celltype_provis), "NA", new_seurat$celltype_provis)
+table(new_seurat$celltype_provis, useNA = "always")
+
+
+new_seurat$integrated_snn_res.1 %>% mytable()
+new_seurat$RNA_snn_res.0.5  %>% mytable()
+
+new_seurat$cluster_provis = ifelse(is.na(new_seurat$RNA_snn_res.0.5), paste0("old_", new_seurat$integrated_snn_res.1), new_seurat$RNA_snn_res.0.5)
+
+new_seurat$cluster_provis = ifelse(is.na(new_seurat$cluster_provis), "NA", new_seurat$cluster_provis)
+table(new_seurat$cluster_provis, useNA = "always")
+
+
+new_seurat$sample = ifelse(is.na(new_seurat$sample),  new_seurat$donor, new_seurat$sample)
+table(new_seurat$sample, useNA = "always")
+
+
+
+p_unintegrated=DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "unintegrated_clusters"), label = T,repel = T, reduction = "umap.unintegrated") + plot_annotation(title = "Unintegrated merged data")& NoLegend()  
+p_unintegrated
+
+
+
+# Visualization
+
+
+VlnPlot(new_seurat, features = c("nCount_RNA", "nFeature_RNA", "percent.mt", "percent.ribo", "scDblFinder.score"), pt.size = 0, group.by = 'unintegrated_clusters')
+
+
+# anno_all10x2fine = new_seurat@meta.data %>% data.table(keep.rownames = TRUE)
+
+
+```
+
+
+# integration
+```{r}
+# ## Integrated merged , 5 variants----
+# https://satijalab.org/seurat/articles/seurat5_integration
+
+options(future.globals.maxSize = 10e+09)
+options('future.globals.maxSize')
+require(SeuratWrappers) # for FastMNNIntegration and scvi integration
+
+DefaultAssay(new_seurat)
+
+
+new_seurat <- IntegrateLayers(
+  object = new_seurat, method = RPCAIntegration,
+  orig.reduction = "pca", new.reduction = "integrated.rpca",
+  verbose = TRUE
+)
+
+new_seurat <- FindNeighbors(new_seurat, reduction = "integrated.rpca", dims = 1:30)
+new_seurat <- FindClusters(new_seurat, resolution = 1, cluster.name = "rpca_clusters")
+new_seurat <- RunUMAP(new_seurat, reduction = "integrated.rpca", dims = 1:30, reduction.name = "umap.rpca")
+
+p_rpca = DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "rpca_clusters"), label = T,repel = T, reduction = "umap.rpca") + plot_annotation(title = "rpca Integrated merged data")& NoLegend()  
+p_rpca
+
+
+
+new_seurat <- IntegrateLayers(
+  object = new_seurat, method = HarmonyIntegration,
+  orig.reduction = "pca", new.reduction = "harmony",
+  verbose = TRUE
+)
+new_seurat <- FindNeighbors(new_seurat, reduction = "harmony", dims = 1:30)
+new_seurat <- FindClusters(new_seurat, resolution = 1, cluster.name = "harmony_clusters")
+new_seurat <- RunUMAP(new_seurat, reduction = "harmony", dims = 1:30, reduction.name = "umap.harmony")
+
+
+p_harmony = DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "harmony_clusters"), label = T,repel = T, reduction = "umap.harmony") + plot_annotation(title = "harmony Integrated merged data")& NoLegend()  
+p_harmony
+
+
+
+new_seurat <- IntegrateLayers(
+  object = new_seurat, method = scVIIntegration,
+  new.reduction = "integrated.scvi",
+  conda_env = "C:/Users/hol7525kir/AppData/Local/r-miniconda/envs/scvi-env", verbose = TRUE ) # from windows anaconda prompt, befehl  conda info --envs, dann conda activate C:/Users/hol7525kir/AppData/Local/r-miniconda, dann pip install scvi-tools, dann update SeuratWrappers  . On server disc not possible filename too long
+
+
+new_seurat <- FindNeighbors(new_seurat, reduction = "integrated.scvi", dims = 1:30)
+new_seurat <- FindClusters(new_seurat, resolution = 1, cluster.name = "scvi_clusters")
+new_seurat <- RunUMAP(new_seurat, reduction = "integrated.scvi", dims = 1:30, reduction.name = "umap.scvi")
+
+
+p_scvi= DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "scvi_clusters"), label = T,repel = T, reduction = "umap.scvi") + plot_annotation(title = "scvi Integrated merged data")& NoLegend()  
+p_scvi
+
+
+
+
+new_seurat <- IntegrateLayers(
+  object = new_seurat, method = FastMNNIntegration,
+  new.reduction = "integrated.mnn",
+  verbose = TRUE
+) # not available, also not on github https://raw.githubusercontent.com/satijalab/seurat/1549dcb3075eaeac01c925c4b4bb73c73450fc50/R/integration5.R, also scVIIntegration not available any more
+
+new_seurat <- FindNeighbors(new_seurat, reduction = "integrated.mnn", dims = 1:30)
+new_seurat <- FindClusters(new_seurat, resolution = 1, cluster.name = "mnn_clusters")
+new_seurat <- RunUMAP(new_seurat, reduction = "integrated.mnn", dims = 1:30, reduction.name = "umap.mnn")
+ 
+p_fmnn = DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "mnn_clusters"), label = T,repel = T, reduction = "umap.mnn") + plot_annotation(title = "fast mnn Integrated merged data")& NoLegend()  
+p_fmnn
+
+
+
+
+
+new_seurat <- IntegrateLayers(
+  object = new_seurat, method = JointPCAIntegration,
+  new.reduction = "integrated.jpca",verbose = TRUE
+)
+
+
+new_seurat <- FindNeighbors(new_seurat, reduction = "integrated.jpca", dims = 1:30)
+new_seurat <- FindClusters(new_seurat, resolution = 1, cluster.name = "jpca_clusters")
+new_seurat <- RunUMAP(new_seurat, reduction = "integrated.jpca", dims = 1:30, reduction.name = "umap.jpca")
+
+ 
+p_jpca= DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "jpca_clusters"), label = T,repel = T, reduction = "umap.jpca") + plot_annotation(title = "jpca Integrated merged data")& NoLegend()  
+p_jpca
+
+
+
+
+new_seurat <- IntegrateLayers(
+  object = new_seurat, method = CCAIntegration,
+  orig.reduction = "pca", new.reduction = "integrated.cca",
+  verbose = TRUE
+)
+
+
+new_seurat <- FindNeighbors(new_seurat, reduction = "integrated.cca", dims = 1:30)
+new_seurat <- FindClusters(new_seurat, resolution = 1, cluster.name = "cca_clusters")
+new_seurat <- RunUMAP(new_seurat, reduction = "integrated.cca", dims = 1:30, reduction.name = "umap.cca")
+
+p_cca= DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "cca_clusters"), label = T,repel = T, reduction = "umap.cca") + plot_annotation(title = "cca Integrated merged data")& NoLegend()  
+p_cca
+
+
+
+
+
+
+```
+
+
+ 
+# repeat differntial expression for celltype alignment
+```{r}
+new_seurat2 = JoinLayers(new_seurat)
+new_seurat2$category = ifelse(new_seurat2$sample %in% c('S1', 'S2'), "CPAEC stretched", 
+                               ifelse(new_seurat2$sample %in% c('S3', 'S4'), "ODAEC stretched","Unstretched ODAEC") )
+
+new_seurat2$category %>% mytable()
+
+```
+
+## rpca
+```{r}
+Idents(new_seurat2) = new_seurat2$rpca_clusters
+Idents(new_seurat2) %>% mytable()
+
+cellmarkers_rpca <- FindAllMarkers(new_seurat2, only.pos = FALSE, min.pct = 0.25, logfc.threshold = 0.1)
+
+setDT(cellmarkers_rpca)
+
+
+markers_sign_rpca = cellmarkers_rpca[cellmarkers_rpca$p_val_adj <=0.05,] %>% as.data.table(keep.rownames = T)
+markers_sign_rpca$cluster %>% table() %>% sort(decreasing = T)  
+
+markers_sign_rpca
+markers_sign_rpca = markers_sign_rpca[grepl("^MT-|^RP", gene)==FALSE]
+markers_sign_rpca
+
+markers_sign_rpca[markers_sign_rpca$avg_log2FC >0,"cluster"] %>% table() %>% sort(decreasing = T)  
+markers_sign_rpca[markers_sign_rpca$avg_log2FC <0,"cluster"] %>% table() %>% sort(decreasing = T)  
+
+setDF(markers_sign_rpca)
+
+
+
+if(file.exists(here("results/12_chatti_celltypes_gpt41_rpca"))==FALSE) {
+  
+  res_gpt4omini_30_ud_rpca <- gptcelltype_hk(input = markers_sign_rpca,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4o-mini', include_downreg=T) # less than one cent
+  
+  res_gpt4omini_30_ud_rpca
+  
+  # res_gpt4.1_30_ud_rpca <- gptcelltype_hk(input = markers_sign_rpca,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4.1', include_downreg=TRUE) # 
+  
+  res_gpt4.1_30_ud_rpca
+  
+  chatti_rpca = data.table(
+    res_gpt4.1_30_ud_rpca = res_gpt4.1_30_ud_rpca %>% str_trim(),
+    res_gpt4omini_30_ud_rpca=res_gpt4omini_30_ud_rpca %>% str_trim(),
+    celltypenum = names(res_gpt4.1_30_ud_rpca)%>% str_trim())
+  chatti_rpca
+  
+  
+  fwrite(chatti_rpca, here("results/12_chatti_celltypes_gpt41_rpca"), sep = "\t")
+} else chatti_rpca = fread(here("results/12_chatti_celltypes_gpt41_rpca"))
+chatti_rpca
+
+
+new_seurat2$celltype_chatti4_1_v3_rpca = chatti_rpca[match_hk(new_seurat2$rpca_clusters, chatti_rpca$celltypenum), res_gpt4.1_30_ud_rpca ]
+new_seurat2$celltype_chatti4_1_v3_rpca %>% mytable()
+
+new_seurat2$celltype_chatti4_1_v3_rpca_pur = str_split(new_seurat2$celltype_chatti4_1_v3_rpca, "\\:") %>% sapply("[", 2) %>% str_trim()
+new_seurat2$celltype_chatti4_1_v3_rpca_pur %>% mytable()
+
+
+(DimPlot(new_seurat2, group.by = c('run10x', "celltype_chatti4_1_v3_rpca_pur"), label = T,repel = T,  reduction = "umap.rpca") & theme(legend.position = "bottom", legend.text = element_text(size = 7)))+ ggplotSankey(new_seurat2@meta.data[,c( "celltype_provis", "celltype_chatti4_1_v3_rpca_pur", "category")] %>% data.table() %>% .[,.(unintegrated = celltype_provis %>% str_wrap(20), integrated = celltype_chatti4_1_v3_rpca_pur %>% str_wrap(40), category)]  )
+
+
+ 
+
+
+
+```
+
+## harmony
+```{r}
+Idents(new_seurat2) = new_seurat2$harmony_clusters
+Idents(new_seurat2) %>% mytable()
+
+cellmarkers_harmony <- FindAllMarkers(new_seurat2, only.pos = FALSE, min.pct = 0.25, logfc.threshold = 0.1)
+
+setDT(cellmarkers_harmony)
+
+
+markers_sign_harmony = cellmarkers_harmony[cellmarkers_harmony$p_val_adj <=0.05,] %>% as.data.table(keep.rownames = T)
+markers_sign_harmony$cluster %>% table() %>% sort(decreasing = T)  
+
+markers_sign_harmony
+markers_sign_harmony = markers_sign_harmony[grepl("^MT-|^RP", gene)==FALSE]
+markers_sign_harmony
+
+markers_sign_harmony[markers_sign_harmony$avg_log2FC >0,"cluster"] %>% table() %>% sort(decreasing = T)  
+markers_sign_harmony[markers_sign_harmony$avg_log2FC <0,"cluster"] %>% table() %>% sort(decreasing = T)  
+
+setDF(markers_sign_harmony)
+
+
+
+if(file.exists(here("results/12_chatti_celltypes_gpt41_harmony"))==FALSE) {
+  
+  res_gpt4omini_30_ud_harmony <- gptcelltype_hk(input = markers_sign_harmony,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4o-mini', include_downreg=T) # less than one cent
+  
+  res_gpt4omini_30_ud_harmony
+  
+  # res_gpt4.1_30_ud_harmony <- gptcelltype_hk(input = markers_sign_harmony,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4.1', include_downreg=TRUE) # 
+  
+  res_gpt4.1_30_ud_harmony
+  
+  chatti_harmony = data.table(
+    res_gpt4.1_30_ud_harmony = res_gpt4.1_30_ud_harmony %>% str_trim(),
+    res_gpt4omini_30_ud_harmony=res_gpt4omini_30_ud_harmony %>% str_trim(),
+    celltypenum = names(res_gpt4.1_30_ud_harmony)%>% str_trim())
+  chatti_harmony
+  
+  
+  fwrite(chatti_harmony, here("results/12_chatti_celltypes_gpt41_harmony"), sep = "\t")
+} else chatti_harmony = fread(here("results/12_chatti_celltypes_gpt41_harmony"))
+chatti_harmony
+
+
+new_seurat2$celltype_chatti4_1_v3_harmony = chatti_harmony[match_hk(new_seurat2$harmony_clusters, chatti_harmony$celltypenum), res_gpt4.1_30_ud_harmony ]
+new_seurat2$celltype_chatti4_1_v3_harmony %>% mytable()
+
+new_seurat2$celltype_chatti4_1_v3_harmony_pur = str_split(new_seurat2$celltype_chatti4_1_v3_harmony, "\\:") %>% sapply("[", 2) %>% str_trim()
+new_seurat2$celltype_chatti4_1_v3_harmony_pur %>% mytable()
+
+
+
+
+(DimPlot(new_seurat2, group.by = c('run10x', "celltype_chatti4_1_v3_harmony_pur"), label = T,repel = T,  reduction = "umap.harmony") & theme(legend.position = "bottom", legend.text = element_text(size = 7)))+ ggplotSankey(new_seurat2@meta.data[,c( "celltype_provis", "celltype_chatti4_1_v3_harmony_pur", "category")] %>% data.table() %>% .[,.(unintegrated = celltype_provis %>% str_wrap(20), integrated = celltype_chatti4_1_v3_harmony_pur %>% str_wrap(40), category)]  )
+
+plotly::ggplotly(DimPlot(new_seurat2, group.by = c('run10x', "celltype_provis"), label = T,repel = T,raster=FALSE,  reduction = "umap.harmony"))
+
+
+```
+
+## scvi 
+```{r}
+Idents(new_seurat2) = new_seurat2$scvi_clusters
+Idents(new_seurat2) %>% mytable()
+
+cellmarkers_scvi <- FindAllMarkers(new_seurat2, only.pos = FALSE, min.pct = 0.25, logfc.threshold = 0.1)
+
+setDT(cellmarkers_scvi)
+
+
+markers_sign_scvi = cellmarkers_scvi[cellmarkers_scvi$p_val_adj <=0.05,] %>% as.data.table(keep.rownames = T)
+markers_sign_scvi$cluster %>% table() %>% sort(decreasing = T)  
+
+markers_sign_scvi
+markers_sign_scvi = markers_sign_scvi[grepl("^MT-|^RP", gene)==FALSE]
+markers_sign_scvi
+
+markers_sign_scvi[markers_sign_scvi$avg_log2FC >0,"cluster"] %>% table() %>% sort(decreasing = T)  
+markers_sign_scvi[markers_sign_scvi$avg_log2FC <0,"cluster"] %>% table() %>% sort(decreasing = T)  
+
+setDF(markers_sign_scvi)
+
+
+
+if(file.exists(here("results/12_chatti_celltypes_gpt41_scvi"))==FALSE) {
+  
+  res_gpt4omini_30_ud_scvi <- gptcelltype_hk(input = markers_sign_scvi,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4o-mini', include_downreg=T) # less than one cent
+  
+  res_gpt4omini_30_ud_scvi
+  
+  # res_gpt4.1_30_ud_scvi <- gptcelltype_hk(input = markers_sign_scvi,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4.1', include_downreg=TRUE) # 
+  
+  res_gpt4.1_30_ud_scvi
+  
+  chatti_scvi = data.table(
+    res_gpt4.1_30_ud_scvi = res_gpt4.1_30_ud_scvi %>% str_trim(),
+    res_gpt4omini_30_ud_scvi=res_gpt4omini_30_ud_scvi %>% str_trim(),
+    celltypenum = names(res_gpt4.1_30_ud_scvi)%>% str_trim())
+  chatti_scvi
+  
+  
+  fwrite(chatti_scvi, here("results/12_chatti_celltypes_gpt41_scvi"), sep = "\t")
+} else chatti_scvi = fread(here("results/12_chatti_celltypes_gpt41_scvi"))
+chatti_scvi
+
+
+new_seurat2$celltype_chatti4_1_v3_scvi = chatti_scvi[match_hk(new_seurat2$scvi_clusters, chatti_scvi$celltypenum), res_gpt4.1_30_ud_scvi ]
+new_seurat2$celltype_chatti4_1_v3_scvi %>% mytable()
+
+new_seurat2$celltype_chatti4_1_v3_scvi_pur = str_split(new_seurat2$celltype_chatti4_1_v3_scvi, "\\:") %>% sapply("[", 2) %>% str_trim()
+new_seurat2$celltype_chatti4_1_v3_scvi_pur %>% mytable()
+
+
+(DimPlot(new_seurat2, group.by = c('run10x', "celltype_chatti4_1_v3_scvi_pur"), label = T,repel = T,  reduction = "umap.scvi") & theme(legend.position = "bottom", legend.text = element_text(size = 7)))+ ggplotSankey(new_seurat2@meta.data[,c( "celltype_provis", "celltype_chatti4_1_v3_scvi_pur", "category")] %>% data.table() %>% .[,.(unintegrated = celltype_provis %>% str_wrap(20), integrated = celltype_chatti4_1_v3_scvi_pur %>% str_wrap(40), category)]  )
+
+
+```
+
+## fmnn 
+```{r}
+Idents(new_seurat2) = new_seurat2$mnn_clusters
+Idents(new_seurat2) %>% mytable()
+
+cellmarkers_mnn <- FindAllMarkers(new_seurat2, only.pos = FALSE, min.pct = 0.25, logfc.threshold = 0.1)
+
+setDT(cellmarkers_mnn)
+
+
+markers_sign_mnn = cellmarkers_mnn[cellmarkers_mnn$p_val_adj <=0.05,] %>% as.data.table(keep.rownames = T)
+markers_sign_mnn$cluster %>% table() %>% sort(decreasing = T)  
+
+markers_sign_mnn
+markers_sign_mnn = markers_sign_mnn[grepl("^MT-|^RP", gene)==FALSE]
+markers_sign_mnn
+
+markers_sign_mnn[markers_sign_mnn$avg_log2FC >0,"cluster"] %>% table() %>% sort(decreasing = T)  
+markers_sign_mnn[markers_sign_mnn$avg_log2FC <0,"cluster"] %>% table() %>% sort(decreasing = T)  
+
+setDF(markers_sign_mnn)
+
+
+
+if(file.exists(here("results/12_chatti_celltypes_gpt41_mnn"))==FALSE) {
+  
+  res_gpt4omini_30_ud_mnn <- gptcelltype_hk(input = markers_sign_mnn,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4o-mini', include_downreg=T) # less than one cent
+  
+  res_gpt4omini_30_ud_mnn
+  
+  # res_gpt4.1_30_ud_mnn <- gptcelltype_hk(input = markers_sign_mnn,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4.1', include_downreg=TRUE) # 
+  
+  res_gpt4.1_30_ud_mnn
+  
+  chatti_mnn = data.table(
+    res_gpt4.1_30_ud_mnn = res_gpt4.1_30_ud_mnn %>% str_trim(),
+    res_gpt4omini_30_ud_mnn=res_gpt4omini_30_ud_mnn %>% str_trim(),
+    celltypenum = names(res_gpt4.1_30_ud_mnn)%>% str_trim())
+  chatti_mnn
+  
+  
+  fwrite(chatti_mnn, here("results/12_chatti_celltypes_gpt41_mnn"), sep = "\t")
+} else chatti_mnn = fread(here("results/12_chatti_celltypes_gpt41_mnn"))
+chatti_mnn
+
+
+new_seurat2$celltype_chatti4_1_v3_mnn = chatti_mnn[match_hk(new_seurat2$mnn_clusters, chatti_mnn$celltypenum), res_gpt4.1_30_ud_mnn ]
+new_seurat2$celltype_chatti4_1_v3_mnn %>% mytable()
+
+new_seurat2$celltype_chatti4_1_v3_mnn_pur = str_split(new_seurat2$celltype_chatti4_1_v3_mnn, "\\:") %>% sapply("[", 2) %>% str_trim()
+new_seurat2$celltype_chatti4_1_v3_mnn_pur %>% mytable()
+
+
+(DimPlot(new_seurat2, group.by = c('run10x', "celltype_chatti4_1_v3_mnn_pur"), label = T,repel = T,  reduction = "umap.mnn") & theme(legend.position = "bottom", legend.text = element_text(size = 7)))+ ggplotSankey(new_seurat2@meta.data[,c( "celltype_provis", "celltype_chatti4_1_v3_mnn_pur", "category")] %>% data.table() %>% .[,.(unintegrated = celltype_provis %>% str_wrap(20), integrated = celltype_chatti4_1_v3_mnn_pur %>% str_wrap(40), category)]  )
+
+
+```
+
+## jpca 
+```{r}
+Idents(new_seurat2) = new_seurat2$jpca_clusters
+Idents(new_seurat2) %>% mytable()
+
+cellmarkers_jpca <- FindAllMarkers(new_seurat2, only.pos = FALSE, min.pct = 0.25, logfc.threshold = 0.1)
+
+setDT(cellmarkers_jpca)
+
+
+markers_sign_jpca = cellmarkers_jpca[cellmarkers_jpca$p_val_adj <=0.05,] %>% as.data.table(keep.rownames = T)
+markers_sign_jpca$cluster %>% table() %>% sort(decreasing = T)  
+
+markers_sign_jpca
+markers_sign_jpca = markers_sign_jpca[grepl("^MT-|^RP", gene)==FALSE]
+markers_sign_jpca
+
+markers_sign_jpca[markers_sign_jpca$avg_log2FC >0,"cluster"] %>% table() %>% sort(decreasing = T)  
+markers_sign_jpca[markers_sign_jpca$avg_log2FC <0,"cluster"] %>% table() %>% sort(decreasing = T)  
+
+setDF(markers_sign_jpca)
+
+
+
+if(file.exists(here("results/12_chatti_celltypes_gpt41_jpca"))==FALSE) {
+  
+  res_gpt4omini_30_ud_jpca <- gptcelltype_hk(input = markers_sign_jpca,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4o-mini', include_downreg=T) # less than one cent
+  
+  res_gpt4omini_30_ud_jpca
+  res_gpt4omini_30_ud_jpca = res_gpt4omini_30_ud_jpca[res_gpt4omini_30_ud_jpca !="```" ]
+  names(res_gpt4omini_30_ud_jpca) =res_gpt4omini_30_ud_jpca %>% str_split("\\:") %>% sapply("[", 1) %>% str_trim()
+  res_gpt4omini_30_ud_jpca
+  # res_gpt4.1_30_ud_jpca <- gptcelltype_hk(input = markers_sign_jpca,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4.1', include_downreg=TRUE) # 
+  
+  res_gpt4.1_30_ud_jpca
+  
+  chatti_jpca = data.table(
+    res_gpt4.1_30_ud_jpca = res_gpt4.1_30_ud_jpca %>% str_trim(),
+    res_gpt4omini_30_ud_jpca=res_gpt4omini_30_ud_jpca %>% str_trim(),
+    celltypenum = names(res_gpt4.1_30_ud_jpca)%>% str_trim())
+  chatti_jpca
+  
+  
+  fwrite(chatti_jpca, here("results/12_chatti_celltypes_gpt41_jpca"), sep = "\t")
+} else chatti_jpca = fread(here("results/12_chatti_celltypes_gpt41_jpca"))
+chatti_jpca
+
+
+new_seurat2$celltype_chatti4_1_v3_jpca = chatti_jpca[match_hk(new_seurat2$jpca_clusters, chatti_jpca$celltypenum), res_gpt4.1_30_ud_jpca ]
+new_seurat2$celltype_chatti4_1_v3_jpca %>% mytable()
+
+new_seurat2$celltype_chatti4_1_v3_jpca_pur = str_split(new_seurat2$celltype_chatti4_1_v3_jpca, "\\:") %>% sapply("[", 2) %>% str_trim()
+new_seurat2$celltype_chatti4_1_v3_jpca_pur %>% mytable()
+
+
+(DimPlot(new_seurat2, group.by = c('run10x', "celltype_chatti4_1_v3_jpca_pur"), label = T,repel = T,  reduction = "umap.jpca") & theme(legend.position = "bottom", legend.text = element_text(size = 7)))+ ggplotSankey(new_seurat2@meta.data[,c( "celltype_provis", "celltype_chatti4_1_v3_jpca_pur", "category")] %>% data.table() %>% .[,.(unintegrated = celltype_provis %>% str_wrap(20), integrated = celltype_chatti4_1_v3_jpca_pur %>% str_wrap(40), category)]  )
+
+
+```
+
+
+## cca 
+```{r}
+Idents(new_seurat2) = new_seurat2$cca_clusters
+Idents(new_seurat2) %>% mytable()
+
+cellmarkers_cca <- FindAllMarkers(new_seurat2, only.pos = FALSE, min.pct = 0.2, logfc.threshold = 0.08)
+
+setDT(cellmarkers_cca)
+
+
+markers_sign_cca = cellmarkers_cca[cellmarkers_cca$p_val_adj <=0.05,] %>% as.data.table(keep.rownames = T)
+markers_sign_cca$cluster %>% table() %>% sort(decreasing = T)  
+
+markers_sign_cca
+markers_sign_cca = markers_sign_cca[grepl("^MT-|^RP", gene)==FALSE]
+markers_sign_cca
+
+markers_sign_cca[markers_sign_cca$avg_log2FC >0,"cluster"] %>% table() %>% sort(decreasing = T)  
+markers_sign_cca[markers_sign_cca$avg_log2FC <0,"cluster"] %>% table() %>% sort(decreasing = T)  
+
+setDF(markers_sign_cca)
+
+
+
+if(file.exists(here("results/12_chatti_celltypes_gpt41_cca"))==FALSE) {
+  
+  res_gpt4omini_30_ud_cca <- gptcelltype_hk(input = markers_sign_cca,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4o-mini', include_downreg=T) # less than one cent
+  
+  res_gpt4omini_30_ud_cca
+  res_gpt4omini_30_ud_cca = res_gpt4omini_30_ud_cca[res_gpt4omini_30_ud_cca !="```" ]
+  names(res_gpt4omini_30_ud_cca) =res_gpt4omini_30_ud_cca %>% str_split("\\:") %>% sapply("[", 1) %>% str_trim()
+  res_gpt4omini_30_ud_cca
+  # res_gpt4.1_30_ud_cca <- gptcelltype_hk(input = markers_sign_cca,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4.1', include_downreg=TRUE) # 
+  
+  res_gpt4.1_30_ud_cca
+  
+  chatti_cca = data.table(
+    res_gpt4.1_30_ud_cca = res_gpt4.1_30_ud_cca %>% str_trim(),
+    res_gpt4omini_30_ud_cca=res_gpt4omini_30_ud_cca %>% str_trim(),
+    celltypenum = names(res_gpt4.1_30_ud_cca)%>% str_trim())
+  chatti_cca
+  
+  
+  fwrite(chatti_cca, here("results/12_chatti_celltypes_gpt41_cca"), sep = "\t")
+} else chatti_cca = fread(here("results/12_chatti_celltypes_gpt41_cca"))
+chatti_cca
+
+
+new_seurat2$celltype_chatti4_1_v3_cca = chatti_cca[match_hk(new_seurat2$cca_clusters, chatti_cca$celltypenum), res_gpt4.1_30_ud_cca ]
+new_seurat2$celltype_chatti4_1_v3_cca %>% mytable()
+
+new_seurat2$celltype_chatti4_1_v3_cca_pur = str_split(new_seurat2$celltype_chatti4_1_v3_cca, "\\:") %>% sapply("[", 2) %>% str_trim()
+new_seurat2$celltype_chatti4_1_v3_cca_pur %>% mytable()
+
+
+(DimPlot(new_seurat2, group.by = c('run10x', "celltype_chatti4_1_v3_cca_pur"), label = T,repel = T,  reduction = "umap.cca") & theme(legend.position = "bottom", legend.text = element_text(size = 7)))+ ggplotSankey(new_seurat2@meta.data[,c( "celltype_provis", "celltype_chatti4_1_v3_cca_pur", "category")] %>% data.table() %>% .[,.(unintegrated = celltype_provis %>% str_wrap(20), integrated = celltype_chatti4_1_v3_cca_pur %>% str_wrap(40), category)]  )
+
+
+```
+
+
+
+
+# Marker plot
+
+```{r}
+# Create species-specific plots - Basic version
+ epithel_markers <- rbind(
+   data.table(celltype = "Basal epithelial", markers = c("KRT5", "TP63", "EGFR", "KRT14")),  # KRT5/TP63 are canonical markers
+   data.table(celltype = "Type 2 alveolar", markers = c("SFTPC", "SFTPB", "SFTA2", "NAPSA")),  # SFTPC is canonical specific marker
+   data.table(celltype = "Type 1 alveolar", markers = c("AGER", "HOPX", "CADM1", "RBMS3")),  # AGER is canonical specific marker
+   data.table(celltype = "Club", markers = c("SCGB1A1", "CYP2B7P", "TMC5", "NEBL")),  # SCGB1A1 is canonical but not in data
+   data.table(celltype = "Endothelial", markers = c("CDH5", "ERG", "CALCRL", "TIE1")),  # CDH5 is canonical specific marker
+   data.table(celltype = "Fibroblasts", markers = c("VIM", "LGALS1", "COL1A1", "FABP5")),  # VIM/COL1A1 are canonical
+   data.table(celltype = "Epithelial", markers = c("EPCAM", "KRT8", "KRT19", "CDH1"))  # EPCAM is canonical specific marker
+ )
+marker_plot_basic_v2 <- doMarkerDotPlot(seurat = new_seurat2, 
+                                     marker_groups_peter = epithel_markers, 
+                                     grouping_factor = 'celltype_chatti4_1_v3_rpca'
+) 
+
+```
+
+## liu marker
+
+```{r}
+liu_markers <- rbind(
+   data.table(celltype = "3: BASC-like cell", markers = c("SCGB3A2", "CYP2F1", "SCGB1A1")),  # Column 3 - yellow markersn no "Cbr2" https://www.alliancegenome.org/gene/MGI:107200
+   data.table(celltype = "6: Transient cell", markers = c( "MT-ATP8", "ABCA3", "C5")),  # Column 6 - yellow markers (Note: Gm26917 none, Hc -> C5)
+   data.table(celltype = "2: Cxcl15 - high AT2 cell", markers = c("LYZ", "SFTPC" )),  # Column 2 - yellow markers no ortho for "Cxcl15"
+   data.table(celltype = "4: Chit1 - high AT2 cell", markers = c("C5", "LYZ", "SFTPC",   "CHIT1", "IL33", "CD74", "HLA-DQA1", "HLA-DQA2")),  # Column 4 - yellow markers (H2-Aa -> HLA-DQA2 HLA-DQA1)
+   data.table(celltype = "5: Ereg - high AT2 cell", markers = c("LY6H", "H2AZ1", "EREG")),  # Column 5 - yellow markers (Ly6a -> LY6H)
+   data.table(celltype = "1: Cldn4 - high PreAT1 cell", markers = c("CLDN4", "CLU", "LGALS3", "KRT8")),  # Column 1 - yellow markers
+   data.table(celltype = "7: AT1 cell", markers = c("HOPX", "AKAP5", "AGER", "RTKN2"))  # Column 7 - yellow markers
+ )
+marker_plot_liu <- doMarkerDotPlot(seurat = new_seurat2, 
+                                     marker_groups_peter = liu_markers, 
+                                     grouping_factor = 'celltype_chatti4_1_v3_rpca'
+) 
+```
+
+
+# Save
+save allso findalmarkerlis
+```{r}
+anno_new_seurat2 = new_seurat2@meta.data %>% data.table(keep.rownames = T)
+fwrite(anno_new_seurat2, here("results/12_1_anno_all10x_celltypes_qced_integrated_withUnstretched.txt.gz"), sep = "\t")
+saveRDS(new_seurat2, here("results/12_1_anno_all10x_celltypes_qced_integrated_withUnstretched.rds"))
+
+get_full_gene_names <- function(gene_symbols, organism = "mouse") {
+   
+  input = data.table(gene_symbols)
+    input[, initialorder := .I]
+    
+  
+  if(organism == "mouse") {
+    
+  library(org.Mm.eg.db)
+  results <- select(org.Mm.eg.db, keys = gene_symbols, columns = c("SYMBOL", "GENENAME"), keytype = "SYMBOL") |> 
+      data.table(keep.rownames = FALSE)
+  results2 = results[is.na(GENENAME)==FALSE,.(GENENAME=paste(GENENAME, collapse = " /// alternative_fullname:,")), by = SYMBOL]
+    
+  input[, GENENAME := results2[match_hk(input$gene_symbols, results2$SYMBOL), GENENAME]]
+    
+    return(input$GENENAME)
+  
+  } else if(organism == "human") {
+    library(org.Hs.eg.db)
+   
+    results <- select(org.Hs.eg.db, keys = unique(gene_symbols), columns = c("SYMBOL", "GENENAME"), keytype = "SYMBOL") |> 
+      data.table(keep.rownames = FALSE)
+    
+    results2 = results[is.na(GENENAME)==FALSE,.(GENENAME=paste(GENENAME, collapse = " /// alternative_fullname:,")),  SYMBOL]
+  
+    input[, GENENAME := results2[match_hk(input$gene_symbols, results2$SYMBOL), GENENAME]]
+    
+    return(input$GENENAME)
+  } else {
+    stop("Unsupported organism. Please use 'mouse' or 'human'.")
+  }
+  
+}
+
+
+cellmarkers_rpca[, fullname := get_full_gene_names(gene_symbols = gene, organism = "human")]
+cellmarkers_rpca[,cluster := as.numeric(as.character(cluster))]
+setcolorder(cellmarkers_rpca, "cluster")
+
+writexl::write_xlsx(list(cellmarkers_rpca = cellmarkers_rpca), here("results/12_1_cellmarkers_rpca_clust_with_unstretched.xlsx"))
+```
+
+# finalize
+```{r}
+finalizeSkript()
+```

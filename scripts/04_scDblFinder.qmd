@@ -159,7 +159,7 @@ str(qlist1) # ENSG00000290825 (DEAD/H-Box Helicase 11 Like 16 (Pseudogene)) is a
 # DDX11L1provided by HGNC
 
 geneinfo = rbind(geneinfo_pre, data.table(geneid = "ENSG00000290825", genename = "DDX11L1", genetype = "lncRNA"))
-qlist2 = venn2(geneinfo2$geneid, rownames(combined_seurat), mylabels = c("geneid", "cellranger"), mytitle = "Gene name convert")
+qlist2 = venn2(geneinfo$geneid, rownames(combined_seurat), mylabels = c("geneid", "cellranger"), mytitle = "Gene name convert")
 
 
 geneinfo[, average_expression10k := avex2[match_hk(geneinfo$geneid, avex2$rn), round(10000*V1, 1)]]
@@ -399,6 +399,7 @@ showNA(geneinfo)
 
 # save
 ```{r}
+boxplot(sce_attrib$nFeature_RNA, log = "y")
 fwrite(resi, here("results/04_scDBlFinder.txt.gz"), sep = "\t")
 fwrite(geneinfo, here("results/04_geneinfo_ensg_hgnc.txt.gz"), sep = "\t")
 ```

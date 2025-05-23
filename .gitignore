@@ -53,3 +53,9 @@ results
 
 scripts/_archive/
 
+scripts/*_files/
+scripts/*.html
+
+Rplot*.pdf
+
+data/GSE197949_organoids_HT2.rds

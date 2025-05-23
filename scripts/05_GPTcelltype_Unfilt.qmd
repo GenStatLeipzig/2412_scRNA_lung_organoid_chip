@@ -57,7 +57,7 @@ options(scipen=999)
 
 ## special functions
 ```{r}
-source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-02-28.R"))
+source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-05-09.R"))
 
 
 ```
@@ -129,8 +129,8 @@ combined_seurat_pre <- merge(x = seurat_list[[1]],
 
 
 # add metadata ----
-qlist11 = venn2(anno_previos$rn, colnames(combined_seurat_pre))
-str(qlist11)
+qlist11 = venn2(anno_previos$rn, colnames(combined_seurat_pre), mylabels = c("ScDoubletFinder\nnotBckrd.corrected", c("Cellbender\nBckrd.corrected")))
+  str(qlist11)
 
 combined_seurat = combined_seurat_pre[, colnames(combined_seurat_pre) %in% qlist11$q1]
 combined_seurat
@@ -320,20 +320,20 @@ setDF(markers_sign)
 VlnPlot(combined_seurat, features = "percent.mt")
 # Sys.setenv(OPENAI_API_KEY = 'your_openai_API_key')
 
-if(file.exists(here("results/05_chatti_celltypes.tsv"))==FALSE) {
+if(file.exists(here("results/05_chatti_celltypes_gpt41.tsv"))==FALSE) {
   
-  res_gpt4omini_30_ud <- gptcelltype_hk(input = markers_sign,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4o-mini', include_downreg=T) # less than one cent
+  res_gpt4omini_30_ud <- gptcelltype_hk(input = markers_sign,tissuename = "Human  Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4o-mini', include_downreg=T) # less than one cent
   
   res_gpt4omini_30_ud
   
-  # res_gpt4.5pre_30_ud <- gptcelltype_hk(input = markers_sign,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4.5-preview', include_downreg=TRUE) # 
+  # res_gpt4.1_30_ud <- gptcelltype_hk(input = markers_sign,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4.1', include_downreg=TRUE) # 
   
-  res_gpt4.5pre_30_ud
+  res_gpt4.1_30_ud
   
   chatti = data.table(
-    res_gpt4.5pre_30_ud = res_gpt4.5pre_30_ud,
+    res_gpt4.1_30_ud = res_gpt4.1_30_ud,
     res_gpt4omini_30_ud=res_gpt4omini_30_ud,
-    celltypenum = names(res_gpt4.5pre_30_ud))
+    celltypenum = names(res_gpt4.1_30_ud))
   chatti
   
   # celltype_df = data.table(celltypenunm  = factor(combined_seurat$rs_aortamarker_250328v4renamed) %>% as.numeric(),
@@ -341,43 +341,114 @@ if(file.exists(here("results/05_chatti_celltypes.tsv"))==FALSE) {
   # 
   # 
   # chatti[, celltypename := celltype_df[match_hk(chatti$celltypenum, celltype_df$celltypenunm), celltype]]
-  fwrite(chatti, here("results/05_chatti_celltypes.tsv"), sep = "\t")
-} else chatti = fread(here("results/05_chatti_celltypes.tsv"))
+  fwrite(chatti, here("results/05_chatti_celltypes_gpt41.tsv"), sep = "\t")
+} else chatti = fread(here("results/05_chatti_celltypes_gpt41.tsv"))
 chatti
 
 
-combined_seurat$celltype_chatti4_5 = chatti[match_hk(combined_seurat$seurat_clusters, chatti$celltypenum), res_gpt4.5pre_30_ud]
-combined_seurat$celltype_chatti4_5 %>% mytable()
+combined_seurat$celltype_chatti4_1 = chatti[match_hk(combined_seurat$seurat_clusters, chatti$celltypenum), res_gpt4.1_30_ud ]
+combined_seurat$celltype_chatti4_1 %>% mytable()
 
-seuratanno = combined_seurat@meta.data %>% data.table
-seuratanno[, celltype_chatti4_5 := chatti[match_hk(seuratanno$seurat_clusters, chatti$celltypenum), res_gpt4.5pre_30_ud]]
-
-
-combined_seurat$celltype_chatti4_5_pur = str_split(combined_seurat$celltype_chatti4_5, "\\:") %>% sapply("[", 2)
-combined_seurat$celltype_chatti4_5_pur %>% mytable()
+seuratanno = combined_seurat@meta.data %>% data.table(keep.rownames = T)
+seuratanno[, celltype_chatti4_1 := chatti[match_hk(seuratanno$seurat_clusters, chatti$celltypenum), res_gpt4.1_30_ud ]]
 
 
-seuratanno[, celltype_chatti4_5_pur := str_split(celltype_chatti4_5, "\\:") %>% sapply("[", 2)]
-seuratanno[, .N,celltype_chatti4_5_pur]
+combined_seurat$celltype_chatti4_1_pur = str_split(combined_seurat$celltype_chatti4_1, "\\:") %>% sapply("[", 2) %>% str_trim()
+combined_seurat$celltype_chatti4_1_pur %>% mytable()
 
 
-ggplotSankey(seuratanno[,.(sample, celltype_chatti4_5)])
-ggplotSankey(seuratanno[,.(celltype_chatti4_5, sample )])
-ggplotSankey(seuratanno[,.(celltype_chatti4_5_pur, sample )])
+seuratanno[, celltype_chatti4_1_pur := str_split(celltype_chatti4_1, "\\:") %>% sapply("[", 2) %>% str_trim()]
+seuratanno[, .N,celltype_chatti4_1_pur]
 
-DimPlot(combined_seurat, group.by = "celltype_chatti4_5", label = T, repel = T) 
+
+ggplotSankey(seuratanno[,.(sample, celltype_chatti4_1)])
+ggplotSankey(seuratanno[,.(celltype_chatti4_1, sample )])
+ggplotSankey(seuratanno[,.(celltype_chatti4_1_pur, sample )])
+sort(unique(seuratanno$celltype_chatti4_1_pur))
+
+DimPlot(combined_seurat, group.by = "celltype_chatti4_1", label = T, repel = T) 
 
 
 
 ```
 
+# compare with 4.5
+```{r}
+seuratanno_old = fread(here("results/05_1_seuratanno_celltypes_superliberalfiltered.txt.gz"))
+seuratanno$celltype_chatti4_5_pur = seuratanno_old[match_hk(seuratanno$seurat_clusters, seuratanno_old$seurat_clusters, makeunique = T, importcol = seuratanno_old$celltype_chatti4_5_pur), celltype_chatti4_5_pur %>% str_trim()]
+seuratanno$celltype_chatti4_5_pur %>% mytable()
+ggplotSankey(seuratanno[,.(celltype_chatti4_1_pur, sample ,celltype_chatti4_5_pur)])
+ggplotSankey(seuratanno[,.(celltype_chatti4_1_pur  ,celltype_chatti4_5_pur)])
 
- 
+unique(seuratanno$celltype_chatti4_1) %>% sort()%>% paste(collapse = "\n")  %>% cat()
+unique(seuratanno_old$celltype_chatti4_5) %>% sort()%>% paste(collapse = "\n")  %>% cat()
+```
+
+# show markerplot supporting celltypes
+```{r}
+lung_markers <- rbind(
+  data.table(celltype = "Basal epithelial", markers = c("KRT5", "TP63", "EGFR", "KRT14")),  # KRT5/TP63 are canonical markers
+  data.table(celltype = "Type 2 alveolar", markers = c("SFTPC", "SFTPB", "SFTA2", "NAPSA")),  # SFTPC is canonical specific marker
+  data.table(celltype = "Type 1 alveolar", markers = c("AGER", "HOPX", "CADM1", "RBMS3")),  # AGER is canonical specific marker
+  data.table(celltype = "Club", markers = c("SCGB1A1", "CYP2B7P", "TMC5", "NEBL")),  # SCGB1A1 is canonical but not in data
+  data.table(celltype = "Endothelial", markers = c("CDH5", "ERG", "CALCRL", "TIE1")),  # CDH5 is canonical specific marker
+  data.table(celltype = "Fibroblasts", markers = c("VIM", "LGALS1", "COL1A1", "FABP5")),  # VIM/COL1A1 are canonical
+  data.table(celltype = "Epithelial", markers = c("EPCAM", "KRT8", "KRT19", "CDH1"))  # EPCAM is canonical specific marker
+)
+
+# Create species-specific plots - Basic version
+marker_plot_basic <- doMarkerDotPlot(seurat = combined_seurat, 
+                                     marker_groups_peter = lung_markers, 
+                                     grouping_factor = 'celltype_chatti4_1_pur'
+) 
+
+marker_plot_basic2 <- doMarkerDotPlot(seurat = combined_seurat, 
+                                     marker_groups_peter = lung_markers, 
+                                     grouping_factor = 'celltype_chatti4_1_pur', custom_y_axis = c("Endothelial Cells","Unknown", "Alveolar Type II (ATII) Cells","Club Cells","Alveolar Type I (ATI) Cells",  
+  "Basal Epithelial Cells", 
+"Epithelial Cells")
+) 
+
+marker_plot_cluster <- doMarkerDotPlot(seurat = combined_seurat, 
+                                     marker_groups_peter = lung_markers, 
+                                     grouping_factor = 'celltype_chatti4_1'
+) 
+
+marker_plot_cluster2 <- doMarkerDotPlot(seurat = combined_seurat, 
+                                     marker_groups_peter = lung_markers, 
+                                     grouping_factor = 'celltype_chatti4_1', custom_y_axis = c("4: Endothelial Cells  ", "12: Endothelial Cells  ", 
+"13: Endothelial Cells", "10: Unknown  ", "3: Unknown  ","8: Club Cells  ", "1: Alveolar Type I (ATI) Cells  ","2: Alveolar Type I (ATI) Cells  ", "7: Alveolar Type II (ATII) Cells  ", "0: Basal Epithelial Cells  ", "6: Unknown  ", 
+"9: Unknown  ", 
+ "5: Epithelial Cells  ", 
+"11: Epithelial Cells  ")
+) 
+```
+
+## assign consensus
+```{r}
+seuratanno[,.N, .(seurat_clusters, celltype_chatti4_1)]
+seuratanno[, celltype_chatti4_1_purcons := ifelse(seurat_clusters %in% c(6,9), "Basal Epithelial Cells",
+                                                  ifelse(seurat_clusters %in% c(6,9), "Basal Epithelial Cells",
+                                                ifelse(seurat_clusters %in% c(3,10), "Fibroblasts",celltype_chatti4_1_pur)))]
+
+combined_seurat$celltype_chatti4_1_purcons = seuratanno[match_hk(combined_seurat$seurat_clusters, seuratanno$seurat_clusters, makeunique = TRUE, importcol = seuratanno$celltype_chatti4_1_purcons), celltype_chatti4_1_purcons]
+
+marker_plot_consensus <- doMarkerDotPlot(seurat = combined_seurat, 
+                                     marker_groups_peter = lung_markers, 
+                                     grouping_factor = 'celltype_chatti4_1_purcons', custom_y_axis = c("Endothelial Cells", "Fibroblasts","Alveolar Type II (ATII) Cells", 
+"Club Cells",  "Alveolar Type I (ATI) Cells","Basal Epithelial Cells", 
+"Epithelial Cells")
+) 
+
+DimPlot(combined_seurat, group.by = "celltype_chatti4_1_purcons", label = T, repel = T,label.size = 5) + NoLegend()
+ggplotSankey(seuratanno[,.(celltype_chatti4_1_purcons, sample )])
+```
+
 
 # Save
 ```{r}
-fwrite(seuratanno, here("results/05_1_seuratanno_celltypes_superliberalfiltered.txt.gz"), sep = "\t")
-saveRDS(combined_seurat, here("results/05_1_seurat_celltypes_superliberalfiltered.rds"))
+fwrite(seuratanno, here("results/05_1_seuratanno_celltypes_superliberalfiltered_gpt41.txt.gz"), sep = "\t")
+saveRDS(combined_seurat, here("results/05_1_seurat_celltypes_superliberalfiltered_gpt41.rds"))
 ```
 
 
