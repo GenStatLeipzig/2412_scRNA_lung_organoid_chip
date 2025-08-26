@@ -332,6 +332,7 @@ VlnPlot(new_seurat, features = c("nCount_RNA", "nFeature_RNA", "percent.mt", "pe
 
 
 # integration
+
 ```{r}
 # ## Integrated merged , 5 variants----
 # https://satijalab.org/seurat/articles/seurat5_integration
@@ -341,8 +342,10 @@ options('future.globals.maxSize')
 require(SeuratWrappers) # for FastMNNIntegration and scvi integration
 
 DefaultAssay(new_seurat)
+```
 
-
+## rpca
+```{r}
 new_seurat <- IntegrateLayers(
   object = new_seurat, method = RPCAIntegration,
   orig.reduction = "pca", new.reduction = "integrated.rpca",
@@ -355,9 +358,10 @@ new_seurat <- RunUMAP(new_seurat, reduction = "integrated.rpca", dims = 1:30, re
 
 p_rpca = DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "rpca_clusters"), label = T,repel = T, reduction = "umap.rpca") + plot_annotation(title = "rpca Integrated merged data")& NoLegend()  
 p_rpca
+```
 
-
-
+## harmony
+```{r}
 new_seurat <- IntegrateLayers(
   object = new_seurat, method = HarmonyIntegration,
   orig.reduction = "pca", new.reduction = "harmony",
@@ -370,9 +374,10 @@ new_seurat <- RunUMAP(new_seurat, reduction = "harmony", dims = 1:30, reduction.
 
 p_harmony = DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "harmony_clusters"), label = T,repel = T, reduction = "umap.harmony") + plot_annotation(title = "harmony Integrated merged data")& NoLegend()  
 p_harmony
+```
 
-
-
+## scvi
+```{r}
 new_seurat <- IntegrateLayers(
   object = new_seurat, method = scVIIntegration,
   new.reduction = "integrated.scvi",
@@ -386,10 +391,10 @@ new_seurat <- RunUMAP(new_seurat, reduction = "integrated.scvi", dims = 1:30, re
 
 p_scvi= DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "scvi_clusters"), label = T,repel = T, reduction = "umap.scvi") + plot_annotation(title = "scvi Integrated merged data")& NoLegend()  
 p_scvi
+```
 
-
-
-
+## fastmnn
+```{r}
 new_seurat <- IntegrateLayers(
   object = new_seurat, method = FastMNNIntegration,
   new.reduction = "integrated.mnn",
@@ -402,11 +407,10 @@ new_seurat <- RunUMAP(new_seurat, reduction = "integrated.mnn", dims = 1:30, red
  
 p_fmnn = DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "mnn_clusters"), label = T,repel = T, reduction = "umap.mnn") + plot_annotation(title = "fast mnn Integrated merged data")& NoLegend()  
 p_fmnn
+```
 
-
-
-
-
+## jpca
+```{r}
 new_seurat <- IntegrateLayers(
   object = new_seurat, method = JointPCAIntegration,
   new.reduction = "integrated.jpca",verbose = TRUE
@@ -420,10 +424,10 @@ new_seurat <- RunUMAP(new_seurat, reduction = "integrated.jpca", dims = 1:30, re
  
 p_jpca= DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "jpca_clusters"), label = T,repel = T, reduction = "umap.jpca") + plot_annotation(title = "jpca Integrated merged data")& NoLegend()  
 p_jpca
+```
 
-
-
-
+## cca
+```{r}
 new_seurat <- IntegrateLayers(
   object = new_seurat, method = CCAIntegration,
   orig.reduction = "pca", new.reduction = "integrated.cca",

@@ -1,0 +1,3 @@
+.vdoc*
+not_in_git
+fix conada env.R

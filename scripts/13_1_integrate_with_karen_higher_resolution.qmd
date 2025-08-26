@@ -1,0 +1,530 @@
+---
+title: "integrate with older"
+format:
+  html:
+    df-print: paged
+    fig-width: 10
+    fig-height: 7
+    code-fold: true
+    code-summary: "Show the code"
+    toc: true
+    toc-location: left
+    toc-depth: 3
+    number-sections: false
+    standalone: true
+    embed-resources: true
+editor: source
+execute:
+  cache: false
+editor_options:
+  chunk_output_type: console
+---
+
+# INITITATE
+  
+```{r}
+rm(list = setdiff(ls(), "seurat"))
+# .libPaths("~/rpackages/angmar/")
+.libPaths()
+
+library(toolboxH)
+library(Seurat)
+
+library(here)
+library(ggplot2)
+library(scales)
+library(ggthemes)
+# BiocManager::install("scRNAseq")
+library(BiocParallel)
+library(patchwork)
+# library(DropletUtils)
+# library(celda)
+
+require(gprofiler2)
+
+# BiocManager::install("SingleR")
+
+library(future) #https://satijalab.org/celllines/archive/v3.0/future_vignette.html
+options(future.globals.maxSize= 30*1024^3) # to prevent the error
+future.seed=TRUE # to care for proper random seeds
+# The total size of the 15 globals exported for future expression ('FUN()') is 12.32 GiB.. This exceeds the maximum allowed size of 500.00 MiB (option 'future.globals.maxSize'). The three largest globals are 'object' (12.26 GiB of class 'numeric'), 'split.cells' (54.18 MiB of class 'list') and 'rowVars' (226.99 KiB of class 'function')
+ncores = 4
+plan("multicore", workers = ncores)
+initializeSkript()
+# options(future.globals.maxSize = 10e+09)
+options(scipen=999)
+```
+
+## special functions
+```{r}
+source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-07-04.R"))
+
+# Sys.setenv(OPENAI_API_KEY = 'your_openai_API_key')
+
+```
+```{r}
+
+
+require(Seurat)
+require(here)
+karen_pre = readRDS(here("data/GSE197949_organoids_HT2.rds")) 
+karen_pre
+DimPlot(karen_pre)
+anno_karen = karen_pre@meta.data %>% as.data.table(keep.rownames = TRUE)
+anno_karen[,.N, .(orig.ident, donor)]
+DimPlot(karen_pre, group.by = c("predicted.id", 'cluster'))
+ggplotSankey(anno_karen[,.(predicted.id, cluster)])
+plotly::ggplotly(DimPlot(karen_pre, group.by = c("predicted.id", 'cluster')))
+
+
+```
+
+```{r}
+all10x4 = readRDS(here("results/06_1_all10x4_celltypes_qced_integrated.rds"))
+all10x4
+
+
+```
+
+
+# repeat clustering with filtered and higher level
+```{r}
+# Now process the combined object as needed
+all10x5 = DietSeurat(all10x4, layers = "count")
+all10x5[['mnn.reconstructed']] = NULL
+Assays(all10x5)
+## delete data and scale.date slot
+all10x5[["RNA"]]$data <- NULL
+all10x5[["RNA"]]$scale.data <- NULL
+
+
+
+```
+
+```{r}
+karen = copy(karen_pre)
+DefaultAssay(karen) = "RNA"
+DefaultAssay(karen)
+
+
+```
+
+```{r}
+karen[["integrated"]] = NULL
+
+karen@assays$RNA@counts %>% hh(12)
+karen =  DietSeurat(karen, layers = "counts")
+```
+```{r}
+karen$run10x = karen$orig.ident
+
+
+both10x = merge(x = all10x5, y = karen, add.cell.ids = c("karenstretch", "karenpur"))
+both10x
+both10x = JoinLayers(both10x)
+both10x
+```
+
+```{r}
+both10x$run10x %>% mytable()
+# 
+# both10x
+# both10x[["RNA"]][["data"]] = NULL # does not work
+# both10x[["RNA"]][["data.SeuratProject"]] = NULL # does not work
+# both10x
+```
+
+```{r}
+# Create a new Seurat object with only the counts layer
+counts_matrix <- GetAssayData(both10x, assay = "RNA", layer = "counts")
+new_seurat <- CreateSeuratObject(counts = counts_matrix)
+
+# Copy over metadata and other essential information
+new_seurat@meta.data <- both10x@meta.data
+new_seurat@reductions <- both10x@reductions  # If you have any dimensional reductions
+
+# Verify the new object has only counts
+new_seurat
+
+```
+
+
+```{r}
+new_seurat$run10x %>% mytable()
+new_seurat[["RNA"]] <- split(new_seurat[["RNA"]], f = new_seurat$run10x)
+
+new_seurat <- NormalizeData(new_seurat)
+new_seurat <- FindVariableFeatures(new_seurat)
+new_seurat <- ScaleData(new_seurat)
+new_seurat <- RunPCA(new_seurat)
+
+# Add clustering
+new_seurat <- FindNeighbors(new_seurat, dims = 1:30, reduction = "pca")
+
+new_seurat <- FindClusters(new_seurat, resolution = 1, cluster.name = "unintegrated_clusters")
+new_seurat <- RunUMAP(new_seurat, dims = 1:30, reduction = "pca", reduction.name = "umap.unintegrated")
+
+Reductions(new_seurat)
+
+mytable(new_seurat$cluster)
+mytable(new_seurat$celltype_chatti4_1_purcons)
+
+new_seurat$celltype_provis = ifelse(is.na(new_seurat$celltype_chatti4_1_purcons), new_seurat$cluster, new_seurat$celltype_chatti4_1_purcons)
+
+new_seurat$celltype_provis = ifelse(is.na(new_seurat$celltype_provis), "NA", new_seurat$celltype_provis)
+table(new_seurat$celltype_provis, useNA = "always")
+
+
+new_seurat$integrated_snn_res.1 %>% mytable()
+new_seurat$RNA_snn_res.0.5  %>% mytable()
+
+new_seurat$cluster_provis = ifelse(is.na(new_seurat$RNA_snn_res.0.5), paste0("old_", new_seurat$integrated_snn_res.1), new_seurat$RNA_snn_res.0.5)
+
+new_seurat$cluster_provis = ifelse(is.na(new_seurat$cluster_provis), "NA", new_seurat$cluster_provis)
+table(new_seurat$cluster_provis, useNA = "always")
+
+
+new_seurat$sample = ifelse(is.na(new_seurat$sample),  new_seurat$donor, new_seurat$sample)
+table(new_seurat$sample, useNA = "always")
+
+
+
+p_unintegrated=DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "unintegrated_clusters"), label = T,repel = T, reduction = "umap.unintegrated") + plot_annotation(title = "Unintegrated merged data")& NoLegend()  
+p_unintegrated
+
+
+
+# Visualization
+
+
+VlnPlot(new_seurat, features = c("nCount_RNA", "nFeature_RNA", "percent.mt", "percent.ribo", "scDblFinder.score"), pt.size = 0, group.by = 'unintegrated_clusters')
+
+
+# anno_all10x2fine = new_seurat@meta.data %>% data.table(keep.rownames = TRUE)
+
+
+```
+
+
+# integration
+```{r}
+# ## Integrated merged , 5 variants----
+# https://satijalab.org/seurat/articles/seurat5_integration
+
+options(future.globals.maxSize = 10e+09)
+options('future.globals.maxSize')
+require(SeuratWrappers) # for FastMNNIntegration and scvi integration
+
+DefaultAssay(new_seurat)
+
+
+new_seurat <- IntegrateLayers(
+  object = new_seurat, method = RPCAIntegration,
+  orig.reduction = "pca", new.reduction = "integrated.rpca",
+  verbose = TRUE
+)
+
+new_seurat <- FindNeighbors(new_seurat, reduction = "integrated.rpca", dims = 1:30)
+new_seurat <- FindClusters(new_seurat, resolution = 1.8, cluster.name = "rpca_clusters")
+new_seurat <- RunUMAP(new_seurat, reduction = "integrated.rpca", dims = 1:30, reduction.name = "umap.rpca")
+
+p_rpca = DimPlot(new_seurat, group.by = c('sample',"celltype_provis", "rpca_clusters"), label = T,repel = T, reduction = "umap.rpca") + plot_annotation(title = "rpca Integrated merged data")& NoLegend()  
+p_rpca
+
+VlnPlot(new_seurat, group.by = "rpca_clusters", features = c("SCGB1A1", "KRT5")) 
+```
+
+
+ 
+# repeat differntial expression for celltype alignment
+```{r}
+new_seurat2 = JoinLayers(new_seurat)
+new_seurat2$category = ifelse(new_seurat2$sample %in% c('S1', 'S2'), "CPAEC stretched", 
+                               ifelse(new_seurat2$sample %in% c('S3', 'S4'), "ODAEC stretched","Unstretched ODAEC") )
+
+new_seurat2$category %>% mytable()
+
+```
+
+## rpca
+```{r}
+Idents(new_seurat2) = new_seurat2$rpca_clusters
+Idents(new_seurat2) %>% mytable()
+
+cellmarkers_rpca <- FindAllMarkers(new_seurat2, only.pos = FALSE, min.pct = 0.25, logfc.threshold = 0.1)
+
+setDT(cellmarkers_rpca)
+
+
+markers_sign_rpca = cellmarkers_rpca[cellmarkers_rpca$p_val_adj <=0.05,] %>% as.data.table(keep.rownames = T)
+markers_sign_rpca$cluster %>% table() %>% sort(decreasing = T)  
+
+markers_sign_rpca
+markers_sign_rpca = markers_sign_rpca[grepl("^MT-|^RP", gene)==FALSE]
+markers_sign_rpca
+
+markers_sign_rpca[markers_sign_rpca$avg_log2FC >0,"cluster"] %>% table() %>% sort(decreasing = T)  
+markers_sign_rpca[markers_sign_rpca$avg_log2FC <0,"cluster"] %>% table() %>% sort(decreasing = T)  
+
+setDF(markers_sign_rpca)
+
+
+
+if(file.exists(here("results/13_1_chatti_celltypes_gpt41_rpca.txt"))==FALSE) {
+  
+  res_gpt4omini_30_ud_rpca <- gptcelltype_hk(input = markers_sign_rpca,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4o-mini', include_downreg=T) # less than one cent
+  
+  res_gpt4omini_30_ud_rpca
+  
+  # res_gpt4.1_30_ud_rpca <- gptcelltype_hk(input = markers_sign_rpca,tissuename = "Human Epithelial and Endothelial cells", topgenenumber = 30, model = 'gpt-4.1', include_downreg=TRUE) # 
+  
+  sonnet = cell_types <- c(
+ "0" = "Squamous epithelial cells",
+ "1" = "Squamous epithelial cells", 
+ "10" = "Alveolar epithelial cells type 1",
+ "11" = "Myoepithelial cells",
+ "12" = "Basal epithelial cells",
+ "13" = "Basal epithelial cells", 
+ "14" = "Inflammatory epithelial cells",
+ "15" = "Endothelial cells",
+ "16" = "Secretory epithelial cells",
+ "17" = "Club cells",
+ "18" = "Proliferating epithelial cells",
+ "19" = "Metabolically active epithelial cells",
+ "2" = "Alveolar epithelial cells type 1",
+ "20" = "Alveolar epithelial cells type 2", 
+ "21" = "Unknown",
+ "22" = "Interferon-stimulated epithelial cells",
+ "23" = "Keratinocytes",
+ "24" = "Alveolar epithelial cells type 2",
+ "25" = "Endothelial cells",
+ "26" = "Proliferating epithelial cells",
+ "27" = "Secretory epithelial cells",
+ "28" = "Endothelial cells", 
+ "29" = "Mesenchymal-like cells",
+ "3" = "Alveolar epithelial cells type 1",
+ "30" = "Endothelial cells",
+ "31" = "Neuroendocrine cells",
+ "4" = "Transitional epithelial cells",
+ "5" = "Alveolar epithelial cells type 1", 
+ "6" = "Squamous epithelial cells",
+ "7" = "Squamous epithelial cells",
+ "8" = "Alveolar epithelial cells type 1",
+ "9" = "Squamous epithelial cells"
+)
+  opus = cell_types <- c(
+  "0" = "Basal epithelial cells",
+  "1" = "Basal epithelial cells",
+  "2" = "Type I pneumocytes (AT1 cells)",
+  "3" = "Type I pneumocytes (AT1 cells)",
+  "4" = "Mesenchymal/Fibroblast cells",
+  "5" = "Type I pneumocytes (AT1 cells)",
+  "6" = "Basal epithelial cells (activated/proliferative)",
+  "7" = "Basal epithelial cells (activated/proliferative)",
+  "8" = "Type I pneumocytes (AT1 cells)",
+  "9" = "Basal epithelial cells",
+  "10" = "Type I pneumocytes (AT1 cells)",
+  "11" = "Epithelial cells (transitional)",
+  "12" = "Basal epithelial cells",
+  "13" = "Basal/Secretory epithelial cells",
+  "14" = "Type I pneumocytes (AT1 cells, inflammatory)",
+  "15" = "Endothelial cells",
+  "16" = "Epithelial cells (tight junction enriched)",
+  "17" = "Secretory/Club cells",
+  "18" = "Proliferating epithelial cells",
+  "19" = "Epithelial cells (metabolically active)",
+  "20" = "Type II pneumocytes (AT2 cells)",
+  "21" = "Epithelial cells",
+  "22" = "Type I pneumocytes (AT1 cells, interferon-responsive)",
+  "23" = "Epithelial cells",
+  "24" = "Type II pneumocytes (AT2 cells)",
+  "25" = "Endothelial cells",
+  "26" = "Proliferating cells (M/G2 phase)",
+  "27" = "Epithelial cells (specialized)",
+  "28" = "Endothelial cells",
+  "29" = "Endothelial cells (venous)",
+  "30" = "Endothelial cells (capillary)",
+  "31" = "Neuroendocrine cells"
+)
+  
+  opus_incl_markerassessment = cell_types <- c(
+  "0" = "Epithelial cells",
+  "1" = "Epithelial cells", 
+  "2" = "Type I pneumocytes (AT1 cells)",
+  "3" = "Type I pneumocytes (AT1 cells)",
+  "4" = "Mesenchymal/Fibroblast cells",
+  "5" = "Type I pneumocytes (AT1 cells)",
+  "6" = "Epithelial cells (activated)",
+  "7" = "Epithelial cells (activated)",
+  "8" = "Type I pneumocytes (AT1 cells)",
+  "9" = "Epithelial cells",
+  "10" = "Type I pneumocytes (AT1 cells)",
+  "11" = "Epithelial cells (transitional)",
+  "12" = "Basal epithelial cells",
+  "13" = "Basal epithelial cells",
+  "14" = "Type I pneumocytes (AT1 cells, inflammatory)",
+  "15" = "Endothelial cells",
+  "16" = "Epithelial cells (tight junction enriched)",
+  "17" = "Secretory/Club cells",
+  "18" = "Proliferating epithelial cells",
+  "19" = "Epithelial cells (metabolically active)",
+  "20" = "Type II pneumocytes (AT2 cells)",
+  "21" = "Epithelial cells",
+  "22" = "Type I pneumocytes (AT1 cells, interferon-responsive)",
+  "23" = "Epithelial cells",
+  "24" = "Type II pneumocytes (AT2 cells)",
+  "25" = "Endothelial cells",
+  "26" = "Proliferating cells (M/G2 phase)",
+  "27" = "Epithelial cells (specialized)",
+  "28" = "Endothelial cells",
+  "29" = "Endothelial cells (venous)",
+  "30" = "Endothelial cells (capillary)",
+  "31" = "Neuroendocrine cells"
+)
+  
+  res_gpt4.1_30_ud_rpca
+  
+  chatti_rpca = data.table(
+    res_gpt4.1_30_ud_rpca = res_gpt4.1_30_ud_rpca %>% str_trim(),
+    opus_de_based=opus%>% str_trim(),
+    opus = opus_incl_markerassessment,
+    sonnett = sonnet,
+    celltypenum = names(opus))
+  chatti_rpca
+  
+  
+  fwrite(chatti_rpca, here("results/13_1_chatti_celltypes_gpt41_rpca.txt"), sep = "\t")
+} else chatti_rpca = fread(here("results/13_1_chatti_celltypes_gpt41_rpca.txt"))
+chatti_rpca
+
+
+new_seurat2$celltype_opus_rpca = chatti_rpca[match_hk(new_seurat2$rpca_clusters, chatti_rpca$celltypenum), paste0(celltypenum, ": ",opus) ]
+new_seurat2$celltype_opus_rpca %>% mytable()
+
+new_seurat2$celltype_opus_rpca_pur = chatti_rpca[match_hk(new_seurat2$rpca_clusters, chatti_rpca$celltypenum), opus ] #str_split(new_seurat2$celltype_opus_rpca, "\\:") %>% sapply("[", 2) %>% str_trim()
+new_seurat2$celltype_opus_rpca_pur %>% mytable()
+
+
+(DimPlot(new_seurat2, group.by = c('run10x', "celltype_opus_rpca_pur"), label = T,repel = T,  reduction = "umap.rpca") & theme(legend.position = "bottom", legend.text = element_text(size = 7)))+ ggplotSankey(new_seurat2@meta.data[,c( "celltype_provis", "celltype_opus_rpca_pur", "category")] %>% data.table() %>% .[,.(unintegrated = celltype_provis %>% str_wrap(20), integrated = celltype_opus_rpca_pur %>% str_wrap(40), category)]  )
+
+
+chatti_rpca [allDuplicatedEntries(opus)] 
+
+pltot2 = customDimPlot(new_seurat2, group_by =  c("rpca_clusters"),reduction = "umap.rpca",label_darkening_alpha = 0.4) +
+
+customDimPlot(new_seurat2, group_by =  c("celltype_opus_rpca_pur"),reduction = "umap.rpca",label_darkening_alpha = 0.4)
+
+
+ggsave(here("results/13_1_dimplot_by_finerCluster_newCelltypeOpus_rpca.png"), pltot2, height = 12, width = 22)
+
+ggsave(here("results/13_1_dimplot_by_finerCluster_newCelltypeOpus_rpca.pdf"), pltot2, height = 12, width = 22)
+
+ggsave(here("results/13_1_Blnplot_by_finerCluster_SCGB1A1_KRT5_finer_rpca.jpg"),
+VlnPlot(new_seurat2, group.by = "celltype_opus_rpca_pur", features = c("SCGB1A1", "KRT5")), height = 12, width = 22)
+
+
+```
+
+
+
+# Marker plot
+HOPX, AGER (for AT1 cells)
+SFTPC, SFTPA1 (for AT2 cells)
+PECAM1/CD31, CDH5 (for endothelial cells)
+TP63 (for basal cells)
+
+```{r}
+# Create species-specific plots - Basic version
+ epithel_markers <- rbind(
+   data.table(celltype = "Basal epithelial", markers = c("KRT5", "TP63", "EGFR", "KRT14")),  # KRT5/TP63 are canonical markers
+   data.table(celltype = "Type 2 alveolar", markers = c("SFTPC", "SFTPB","SFTPA1", "SFTA2", "NAPSA")),  # SFTPC is canonical specific marker
+   data.table(celltype = "Type 1 alveolar", markers = c("AGER", "HOPX", "CADM1", "RBMS3")),  # AGER is canonical specific marker
+   data.table(celltype = "Club", markers = c("SCGB1A1", "CYP2B7P", "TMC5", "NEBL")),  # SCGB1A1 is canonical but not in data
+   data.table(celltype = "Endothelial", markers = c("CDH5","PECAM1","ERG", "CALCRL", "TIE1")),  # CDH5 is canonical specific marker
+   data.table(celltype = "Fibroblasts", markers = c("VIM", "LGALS1", "COL1A1", "FABP5")),  # VIM/COL1A1 are canonical
+   data.table(celltype = "Epithelial", markers = c("EPCAM", "KRT8", "KRT19", "CDH1"))  # EPCAM is canonical specific marker
+ )
+marker_plot_basic_v2 <- doMarkerDotPlot(seurat = new_seurat2, 
+                                     marker_groups_peter = epithel_markers, 
+                                     grouping_factor = 'celltype_opus_rpca_pur'
+) 
+```
+
+## liu marker
+
+```{r}
+liu_markers <- rbind(
+   data.table(celltype = "3: BASC-like cell", markers = c("SCGB3A2", "CYP2F1", "SCGB1A1")),  # Column 3 - yellow markersn no "Cbr2" https://www.alliancegenome.org/gene/MGI:107200
+   data.table(celltype = "6: Transient cell", markers = c( "MT-ATP8", "ABCA3", "C5")),  # Column 6 - yellow markers (Note: Gm26917 none, Hc -> C5)
+   data.table(celltype = "2: Cxcl15 - high AT2 cell", markers = c("LYZ", "SFTPC" )),  # Column 2 - yellow markers no ortho for "Cxcl15"
+   data.table(celltype = "4: Chit1 - high AT2 cell", markers = c("C5", "LYZ", "SFTPC",   "CHIT1", "IL33", "CD74", "HLA-DQA1", "HLA-DQA2")),  # Column 4 - yellow markers (H2-Aa -> HLA-DQA2 HLA-DQA1)
+   data.table(celltype = "5: Ereg - high AT2 cell", markers = c("LY6H", "H2AZ1", "EREG")),  # Column 5 - yellow markers (Ly6a -> LY6H)
+   data.table(celltype = "1: Cldn4 - high PreAT1 cell", markers = c("CLDN4", "CLU", "LGALS3", "KRT8")),  # Column 1 - yellow markers
+   data.table(celltype = "7: AT1 cell", markers = c("HOPX", "AKAP5", "AGER", "RTKN2"))  # Column 7 - yellow markers
+ )
+marker_plot_liu <- doMarkerDotPlot(seurat = new_seurat2, 
+                                     marker_groups_peter = liu_markers, 
+                                     grouping_factor = 'celltype_opus_rpca_pur'
+) 
+```
+
+
+# Save
+
+
+```{r}
+ggsave(here("results/13_1_marker_plot_basic_v2.png"), marker_plot_basic_v2, height = 8, width = 12)
+ggsave(here("results/13_1_marker_plot_liu.png"), marker_plot_liu, height = 8, width = 12)
+```
+save allso findalmarkerlis
+```{r}
+anno_new_seurat2 = new_seurat2@meta.data %>% data.table(keep.rownames = T)
+fwrite(anno_new_seurat2, here("results/13_1_anno_all10x_celltypes_qced_integrated_withUnstretched.txt.gz"), sep = "\t")
+saveRDS(new_seurat2, here("results/13_1_anno_all10x_celltypes_qced_integrated_withUnstretched.rds"))
+
+get_full_gene_names <- function(gene_symbols, organism = "mouse") {
+   
+  input = data.table(gene_symbols)
+    input[, initialorder := .I]
+    
+  
+  if(organism == "mouse") {
+    
+  library(org.Mm.eg.db)
+  results <- select(org.Mm.eg.db, keys = gene_symbols, columns = c("SYMBOL", "GENENAME"), keytype = "SYMBOL") |> 
+      data.table(keep.rownames = FALSE)
+  results2 = results[is.na(GENENAME)==FALSE,.(GENENAME=paste(GENENAME, collapse = " /// alternative_fullname:,")), by = SYMBOL]
+    
+  input[, GENENAME := results2[match_hk(input$gene_symbols, results2$SYMBOL), GENENAME]]
+    
+    return(input$GENENAME)
+  
+  } else if(organism == "human") {
+    library(org.Hs.eg.db)
+   
+    results <- select(org.Hs.eg.db, keys = unique(gene_symbols), columns = c("SYMBOL", "GENENAME"), keytype = "SYMBOL") |> 
+      data.table(keep.rownames = FALSE)
+    
+    results2 = results[is.na(GENENAME)==FALSE,.(GENENAME=paste(GENENAME, collapse = " /// alternative_fullname:,")),  SYMBOL]
+  
+    input[, GENENAME := results2[match_hk(input$gene_symbols, results2$SYMBOL), GENENAME]]
+    
+    return(input$GENENAME)
+  } else {
+    stop("Unsupported organism. Please use 'mouse' or 'human'.")
+  }
+  
+}
+
+
+cellmarkers_rpca[, fullname := get_full_gene_names(gene_symbols = gene, organism = "human")]
+cellmarkers_rpca[,cluster := as.numeric(as.character(cluster))]
+setcolorder(cellmarkers_rpca, "cluster")
+
+writexl::write_xlsx(list(cellmarkers_rpca = cellmarkers_rpca), here("results/13_1_cellmarkers_rpca_clust_with_unstretched.xlsx"))
+```
+
+# finalize
+```{r}
+finalizeSkript()
+```
