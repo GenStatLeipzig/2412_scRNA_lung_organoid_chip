@@ -14,6 +14,7 @@ We developed a pneumonia-on-a-chip (POC) model using human primary pulmonary mic
 │   ├── 01_setup.R                    # Project setup and directories
 │   ├── 03_nf_scrnaseq.R             # nf-core/scrnaseq pipeline execution
 │   ├── 04_scDblFinder.qmd            # initial doublet estimation, extended later with demuxify
+│   ├── 05_InitialClusters_Unfilt.qmd  # initial clustering and prelim. celltyp annotation
 │   ├── 06_clusterbasedQC.qmd        # Quality control and integration
 │   ├── 08_markerdotplot_rpca.R        # celltype identification support
 │   ├── 10_integrate_with_karen.qmd   # Integration with published organoid data
