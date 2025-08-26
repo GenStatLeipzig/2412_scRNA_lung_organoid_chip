@@ -20,8 +20,9 @@ We developed a pneumonia-on-a-chip (POC) model using human primary pulmonary mic
 │   ├── 11_markerplot_integrated_with_karen.R  # Marker gene visualization
 │   ├── 13_1_integrate_with_karen_higher_resolution.qmd   # Integration with unstretched data
 │   ├── 18_check_doublet.R           # Doublet detection and consensus
-│   └── 21_experiments_vs_celltype_barplot.R # Cell type distribution
-├── demuxify/                  # doublet detection
+│   ├── 21_experiments_vs_celltype_barplot.R # Cell type distribution
+│   └── Figure_Plots.R # reproduction of manuscript figures
+├── demuxify/                      # coprehensive doublet detection
 └── README.md
 
 ```
@@ -46,9 +47,7 @@ We developed a pneumonia-on-a-chip (POC) model using human primary pulmonary mic
 
 Hoffmann K, Behrendt U, Pennitz P, et al. Mechanical strain exacerbates *Pseudomonas* infection in an organoid-based pneumonia-on-a-chip model.  (in review).
 
-## Contact
 
-For questions regarding the computational analysis, please contact geraldine.nouailles@charite.de.
 
 ---
 
