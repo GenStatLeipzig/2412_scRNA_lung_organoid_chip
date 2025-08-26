@@ -47,9 +47,7 @@ We developed a pneumonia-on-a-chip (POC) model using human primary pulmonary mic
 
 Hoffmann K, Behrendt U, Pennitz P, et al. Mechanical strain exacerbates *Pseudomonas* infection in an organoid-based pneumonia-on-a-chip model.  (in review).
 
-## Contact
 
-For questions regarding the computational analysis, please contact geraldine.nouailles@charite.de.
 
 ---
 
