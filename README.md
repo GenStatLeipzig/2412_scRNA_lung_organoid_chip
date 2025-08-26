@@ -22,7 +22,7 @@ We developed a pneumonia-on-a-chip (POC) model using human primary pulmonary mic
 │   ├── 18_check_doublet.R           # Doublet detection and consensus
 │   ├── 21_experiments_vs_celltype_barplot.R # Cell type distribution
 │   └── Figure_Plots.R # reproduction of manuscript figures
-├── demuxify/                  # doublet detection
+├── demuxify/                      # coprehensive doublet detection
 └── README.md
 
 ```
