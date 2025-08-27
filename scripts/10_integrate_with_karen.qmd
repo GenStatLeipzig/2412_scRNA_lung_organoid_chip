@@ -57,7 +57,7 @@ options(scipen=999)
 
 ## special functions
 ```{r}
-source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-05-15.R"))
+source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-07-04git.R"))
 
 gptcelltype_hk <- function(input, tissuename=NULL, model='gpt-4', topgenenumber = 10, 
                            include_downreg = TRUE) {

@@ -57,7 +57,7 @@ options(scipen=999)
 
 ## special functions
 ```{r}
-source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-02-28.R"))
+source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-07-04git.R"))
 
 
 ```

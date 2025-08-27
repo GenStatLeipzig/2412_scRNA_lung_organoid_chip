@@ -57,7 +57,7 @@ options(scipen=999)
 
 ## special functions
 ```{r}
-source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-07-04.R"))
+source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-07-04git.R"))
 
 # Sys.setenv(OPENAI_API_KEY = 'your_openai_API_key')
 

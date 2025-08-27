@@ -4,7 +4,7 @@ require(Seurat)
 require(ggplot2)
 require(ggthemes)
 
-source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-07-04.R"))
+source(here("../../../07_programme/github/scRNATexMex/R/scRNA_functions_25-07-04git.R"))
 # Get all analysis folders
 folders <- list.dirs(here("../gitOrganoid_hk/demuxify"), recursive = TRUE)
 folders <- folders[grepl("S[0-9]", basename(folders))]
