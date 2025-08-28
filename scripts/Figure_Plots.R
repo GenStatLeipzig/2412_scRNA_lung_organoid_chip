@@ -7,7 +7,7 @@ library(ggrepel)
 require(toolboxH)
 library(xlsx)
 
-OrganoidChip <- readRDS("E:/Seurat_Objects/KarenOrganoide/18_integrated_final_woClust27.rds")
+OrganoidChip <- readRDS(".../18_integrated_final_woClust27.rds")
 
 OrganoidChip@active.ident = factor(OrganoidChip$celltype_250709b)
 Cellorder = c('AT1-like', 'AT2', 'Basal', 'Endothelial', 'Basaloid', 'Epithelial', "Epithelial ", 'Neuroendocrine', 'Secretory', "Proliferating")
@@ -161,4 +161,5 @@ p_prop
 #FeaturePlots
 FeaturePlot(OrganoidChip, features = "SFTPC", reduction = "umap.rpca")
 #repeat for SFTPC; LPCAT1; NAPSA; NKX2-1; HOPX; EMP2; AGER (RAGE Receptor); CLIC5; KRT17; KRT8; TP63; KRT5; SCGB1A1; EREG; PECAM1; TOP2A
+
 ggsave("Results/FeaturePlot_SFTPC.pdf", width = 7, height = 7)
